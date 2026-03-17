@@ -248,7 +248,7 @@ let relayManager: RelayManager | null = null;
 
 function getRelayManager(): RelayManager {
   if (!relayManager) {
-    relayManager = new RelayManager(undefined, (event, relay) => {
+    relayManager = new RelayManager(undefined, (event, _relay) => {
       // Handle incoming gift-wrapped DMs
       const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
       if (!nsecRow?.value) return;
@@ -565,6 +565,59 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
         if (!npubRow?.value) return null;
         return { npub: npubRow.value, hasKey: !!nsecRow?.value };
+      },
+
+      // Nostr relay
+      connectRelays: async () => {
+        const mgr = getRelayManager();
+        await mgr.connect();
+
+        // Subscribe to DMs if we have an identity
+        const npubRow = stmts.getConfig.get("npub") as { value: string } | null;
+        if (npubRow?.value) {
+          const { data: pk } = nip19.decode(npubRow.value);
+          const lastSync = stmts.getConfig.get("last_nostr_sync") as { value: string } | null;
+          const since = lastSync ? parseInt(lastSync.value) : undefined;
+          mgr.subscribeToDMs(pk as string, since);
+          // Update last sync time
+          stmts.setConfig.run("last_nostr_sync", String(Math.floor(Date.now() / 1000)));
+        }
+
+        return { connected: mgr.connectedCount, total: mgr.configuredRelays.length };
+      },
+      disconnectRelays: () => {
+        if (relayManager) {
+          relayManager.disconnect();
+          relayManager = null;
+        }
+        return { success: true };
+      },
+      getRelayStatus: () => {
+        if (!relayManager) return { connected: 0, relays: [] };
+        return { connected: relayManager.connectedCount, relays: relayManager.configuredRelays };
+      },
+
+      // Nostr DMs
+      sendDM: async ({ recipientNpub, content, conversationId }) => {
+        const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
+        if (!nsecRow?.value) return { error: "No Nostr identity. Generate a keypair first." };
+
+        try {
+          const { data: recipientPk } = nip19.decode(recipientNpub);
+          const event = createGiftWrap(nsecRow.value, recipientPk as string, {
+            type: "chat",
+            content,
+            conversationId,
+            timestamp: Math.floor(Date.now() / 1000),
+          });
+
+          const mgr = getRelayManager();
+          if (mgr.connectedCount === 0) await mgr.connect();
+          const published = await mgr.publish(event);
+          return { success: true, publishedTo: published.length };
+        } catch (err: any) {
+          return { error: err.message || "Failed to send DM" };
+        }
       },
     },
     messages: {},

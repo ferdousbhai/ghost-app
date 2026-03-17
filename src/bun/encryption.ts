@@ -1,7 +1,6 @@
 import * as nip44 from "nostr-tools/nip44";
 import {
   nip19,
-  getPublicKey,
   finalizeEvent,
   type Event as NostrEvent,
 } from "nostr-tools";

@@ -8,10 +8,13 @@ export function Settings() {
   const [identity, setIdentity] = useState<{ npub: string; hasKey: boolean } | null>(null);
   const [importNsec, setImportNsec] = useState("");
   const [identityError, setIdentityError] = useState("");
+  const [relayStatus, setRelayStatus] = useState<{ connected: number; relays: string[] }>({ connected: 0, relays: [] });
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     rpc.request.hasApiKey({}).then(setHasKey);
     rpc.request.getIdentity({}).then(setIdentity);
+    rpc.request.getRelayStatus({}).then(setRelayStatus);
   }, []);
 
   async function saveApiKey() {
@@ -43,6 +46,18 @@ export function Settings() {
       setImportNsec("");
       setIdentityError("");
     }
+  }
+
+  async function handleConnectRelays() {
+    setConnecting(true);
+    const result = await rpc.request.connectRelays({});
+    setRelayStatus({ connected: result.connected, relays: relayStatus.relays });
+    setConnecting(false);
+  }
+
+  async function handleDisconnectRelays() {
+    await rpc.request.disconnectRelays({});
+    setRelayStatus({ connected: 0, relays: relayStatus.relays });
   }
 
   return (
@@ -140,6 +155,47 @@ export function Settings() {
             {identityError && <p className="text-sm text-red-400">{identityError}</p>}
           </div>
         )}
+      </section>
+
+      {/* Nostr Relays */}
+      <section className="mb-8">
+        <h2 className="text-lg font-medium mb-3">Nostr Relays</h2>
+        <p className="text-sm text-neutral-400 mb-4">
+          Relays are how your ghost communicates with other ghosts.
+        </p>
+        <div className="flex items-center gap-3 mb-3">
+          <div className={`w-2 h-2 rounded-full ${relayStatus.connected > 0 ? "bg-green-500" : "bg-neutral-600"}`} />
+          <span className="text-sm text-neutral-300">
+            {relayStatus.connected > 0
+              ? `Connected to ${relayStatus.connected} relay(s)`
+              : "Disconnected"}
+          </span>
+          <div className="flex-1" />
+          {relayStatus.connected > 0 ? (
+            <button
+              onClick={handleDisconnectRelays}
+              className="px-3 py-1.5 text-sm text-neutral-400 hover:text-neutral-200 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+            >
+              Disconnect
+            </button>
+          ) : (
+            <button
+              onClick={handleConnectRelays}
+              disabled={connecting}
+              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg font-medium transition-colors"
+            >
+              {connecting ? "Connecting..." : "Connect"}
+            </button>
+          )}
+        </div>
+        <div className="text-xs text-neutral-500 space-y-1">
+          <p>Default relays:</p>
+          <ul className="list-disc list-inside text-neutral-600">
+            <li>wss://relay.damus.io</li>
+            <li>wss://relay.nostr.band</li>
+            <li>wss://nos.lol</li>
+          </ul>
+        </div>
       </section>
 
       {/* Model */}
