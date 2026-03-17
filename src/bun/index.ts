@@ -5,9 +5,10 @@ import Database from "bun:sqlite";
 import { generateText, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import type { GhostRPC, Conversation, ChatMessage, Memory, Document } from "../shared/rpc";
+import type { GhostRPC, Conversation, ChatMessage, Memory, Document, Peer } from "../shared/rpc";
 import { getDocsDir, indexDocuments, readDocument, watchDocs } from "./documents";
-import { readFile as readFileFromDisk, writeFile as writeFileToDisk, editFile as editFileOnDisk } from "./tools";
+import { readFile as readFileFromDisk, writeFile as writeFileToDisk, editFile as editFileOnDisk, executeBash, approveToolCall as approveToolCallFn, denyToolCall as denyToolCallFn, getPendingToolCalls as getPendingToolCallsFn } from "./tools";
+import { generateKeypair as genKeypair, identityFromNsec } from "./nostr";
 
 const DEFAULT_CHARACTER_TEMPLATE = `# Character
 
@@ -221,6 +222,12 @@ const stmts = {
   saveCharacter: db.prepare(
     "INSERT INTO config (key, value, updated_at) VALUES ('character', ?, unixepoch()) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()"
   ),
+  listPeers: db.prepare("SELECT * FROM peers ORDER BY last_message_at DESC NULLS LAST, created_at DESC"),
+  addPeer: db.prepare("INSERT INTO peers (npub, username) VALUES (?, ?) ON CONFLICT(npub) DO UPDATE SET username = COALESCE(excluded.username, peers.username)"),
+  removePeer: db.prepare("DELETE FROM peers WHERE npub = ?"),
+  followPeer: db.prepare("UPDATE peers SET is_following = 1 WHERE npub = ?"),
+  unfollowPeer: db.prepare("UPDATE peers SET is_following = 0 WHERE npub = ?"),
+  getPeer: db.prepare("SELECT * FROM peers WHERE npub = ?"),
 };
 
 // ---------------------------------------------------------------------------
@@ -347,6 +354,15 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
                   return editFileOnDisk(path, old_text, new_text);
                 },
               }),
+              bash: tool({
+                description: "Execute a bash command on the user's machine. Use for file operations, system info, package management, running scripts, etc.",
+                parameters: z.object({
+                  command: z.string().describe("The bash command to execute"),
+                }),
+                execute: async ({ command }) => {
+                  return await executeBash(command);
+                },
+              }),
             },
           });
 
@@ -435,12 +451,50 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         return { indexed };
       },
 
+      // Tool approval
+      approveToolCall: async ({ callId }) => {
+        const result = await approveToolCallFn(callId);
+        return { result };
+      },
+      denyToolCall: ({ callId }) => {
+        denyToolCallFn(callId);
+        return { success: true };
+      },
+      getPendingToolCalls: ({ conversationId: _conversationId }) => {
+        // For now return all pending (later filter by conversation)
+        return getPendingToolCallsFn();
+      },
+
       // Settings
       hasApiKey: () => {
         const row = stmts.getConfig.get("api_key") as {
           value: string;
         } | null;
         return row?.value ? true : false;
+      },
+
+      // Nostr identity
+      generateKeypair: () => {
+        const identity = genKeypair();
+        stmts.setConfig.run("nsec", identity.nsec);
+        stmts.setConfig.run("npub", identity.npub);
+        return { npub: identity.npub, nsec: identity.nsec };
+      },
+      importKeypair: ({ nsec }) => {
+        try {
+          const identity = identityFromNsec(nsec);
+          stmts.setConfig.run("nsec", identity.nsec);
+          stmts.setConfig.run("npub", identity.npub);
+          return { npub: identity.npub };
+        } catch (err: any) {
+          return { error: err.message || "Invalid nsec" };
+        }
+      },
+      getIdentity: () => {
+        const npubRow = stmts.getConfig.get("npub") as { value: string } | null;
+        const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
+        if (!npubRow?.value) return null;
+        return { npub: npubRow.value, hasKey: !!nsecRow?.value };
       },
     },
     messages: {},

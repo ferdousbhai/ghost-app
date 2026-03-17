@@ -33,6 +33,25 @@ export type Document = {
   indexed_at: number;
 };
 
+/** A tool call requiring user approval. */
+export type ToolCall = {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  status: "pending" | "approved" | "denied" | "completed";
+  result?: string;
+};
+
+/** A peer on the Nostr network. */
+export type Peer = {
+  npub: string;
+  username: string | null;
+  about: string | null;
+  is_following: number;
+  last_message_at: number | null;
+  created_at: number;
+};
+
 /** Conversation metadata. */
 export type Conversation = {
   id: string;
@@ -113,8 +132,25 @@ export type GhostRPC = {
       getDocsDir: { params: {}; response: string };
       reindexDocuments: { params: {}; response: { indexed: number } };
 
+      // Tool approval
+      approveToolCall: { params: { callId: string }; response: { result: string } };
+      denyToolCall: { params: { callId: string }; response: { success: boolean } };
+      getPendingToolCalls: { params: { conversationId: string }; response: ToolCall[] };
+
+      // Peers
+      listPeers: { params: {}; response: Peer[] };
+      addPeer: { params: { npub: string; username?: string }; response: { success: boolean } | { error: string } };
+      removePeer: { params: { npub: string }; response: { success: boolean } };
+      followPeer: { params: { npub: string }; response: { success: boolean } };
+      unfollowPeer: { params: { npub: string }; response: { success: boolean } };
+
       // Settings
       hasApiKey: { params: {}; response: boolean };
+
+      // Nostr identity
+      generateKeypair: { params: {}; response: { npub: string; nsec: string } };
+      importKeypair: { params: { nsec: string }; response: { npub: string } | { error: string } };
+      getIdentity: { params: {}; response: { npub: string; hasKey: boolean } | null };
     };
     messages: {};
   };
