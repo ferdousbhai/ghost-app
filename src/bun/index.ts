@@ -4,7 +4,8 @@ import { join } from "path";
 import Database from "bun:sqlite";
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import type { GhostRPC, Conversation, ChatMessage, Memory } from "../shared/rpc";
+import type { GhostRPC, Conversation, ChatMessage, Memory, Document } from "../shared/rpc";
+import { getDocsDir, indexDocuments, readDocument, watchDocs } from "./documents";
 
 const DEFAULT_CHARACTER_TEMPLATE = `# Character
 
@@ -147,6 +148,21 @@ db.exec(`
     embedding BLOB,
     indexed_at INTEGER NOT NULL DEFAULT (unixepoch())
   );
+
+  CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(path, title, content='documents', content_rowid='rowid');
+
+  CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN
+    INSERT INTO documents_fts(rowid, path, title) VALUES (new.rowid, new.path, new.title);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN
+    INSERT INTO documents_fts(documents_fts, rowid, path, title) VALUES('delete', old.rowid, old.path, old.title);
+    INSERT INTO documents_fts(rowid, path, title) VALUES (new.rowid, new.path, new.title);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS documents_ad AFTER DELETE ON documents BEGIN
+    INSERT INTO documents_fts(documents_fts, rowid, path, title) VALUES('delete', old.rowid, old.path, old.title);
+  END;
 `);
 
 // ---------------------------------------------------------------------------
@@ -193,11 +209,25 @@ const stmts = {
   searchMemories: db.prepare(
     "SELECT m.key, m.value, m.updated_at FROM memories m JOIN memories_fts f ON m.rowid = f.rowid WHERE memories_fts MATCH ? ORDER BY m.updated_at DESC LIMIT 20"
   ),
+  listDocuments: db.prepare(
+    "SELECT path, title, content_hash, indexed_at FROM documents ORDER BY title ASC"
+  ),
+  searchDocuments: db.prepare(
+    "SELECT d.path, d.title, d.content_hash, d.indexed_at FROM documents d JOIN documents_fts f ON d.rowid = f.rowid WHERE documents_fts MATCH ? ORDER BY d.title ASC LIMIT 20"
+  ),
   getCharacter: db.prepare("SELECT value FROM config WHERE key = 'character'"),
   saveCharacter: db.prepare(
     "INSERT INTO config (key, value, updated_at) VALUES ('character', ?, unixepoch()) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()"
   ),
 };
+
+// ---------------------------------------------------------------------------
+// Document indexing + file watcher
+// ---------------------------------------------------------------------------
+const docsDir = getDocsDir(dataDir);
+const initialCount = indexDocuments(db, docsDir);
+console.log(`Indexed ${initialCount} documents from ${docsDir}`);
+watchDocs(db, docsDir);
 
 // ---------------------------------------------------------------------------
 // RPC handlers
@@ -345,6 +375,29 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         } catch {
           return [];
         }
+      },
+
+      // Documents
+      listDocuments: () => {
+        return stmts.listDocuments.all() as Document[];
+      },
+      readDocument: ({ path }) => {
+        return readDocument(docsDir, path);
+      },
+      searchDocuments: ({ query }) => {
+        const ftsQuery = query.trim().replace(/"/g, '""');
+        try {
+          return stmts.searchDocuments.all(`"${ftsQuery}"*`) as Document[];
+        } catch {
+          return [];
+        }
+      },
+      getDocsDir: () => {
+        return docsDir;
+      },
+      reindexDocuments: () => {
+        const indexed = indexDocuments(db, docsDir);
+        return { indexed };
       },
 
       // Settings

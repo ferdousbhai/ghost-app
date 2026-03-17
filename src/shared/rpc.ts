@@ -25,6 +25,14 @@ export type Memory = {
   updated_at: number;
 };
 
+/** An indexed document from the local docs folder. */
+export type Document = {
+  path: string;
+  title: string | null;
+  content_hash: string;
+  indexed_at: number;
+};
+
 /** Conversation metadata. */
 export type Conversation = {
   id: string;
@@ -97,6 +105,13 @@ export type GhostRPC = {
       };
       deleteMemory: { params: { key: string }; response: { success: boolean } };
       searchMemories: { params: { query: string }; response: Memory[] };
+
+      // Documents
+      listDocuments: { params: {}; response: Document[] };
+      readDocument: { params: { path: string }; response: string | null };
+      searchDocuments: { params: { query: string }; response: Document[] };
+      getDocsDir: { params: {}; response: string };
+      reindexDocuments: { params: {}; response: { indexed: number } };
 
       // Settings
       hasApiKey: { params: {}; response: boolean };
