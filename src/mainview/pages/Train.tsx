@@ -36,40 +36,52 @@ export function Train() {
     }, 1000);
   }, []);
 
+  const completedCount = sections.filter((s) => s.isComplete).length;
+  const progressPercent = sections.length
+    ? (completedCount / sections.length) * 100
+    : 0;
+
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="flex flex-1 overflow-hidden animate-fade-in">
       {/* Section progress sidebar */}
-      <div className="w-48 border-r border-neutral-800 p-4 space-y-3 bg-neutral-900/50">
-        <h2 className="text-sm font-medium text-neutral-300 mb-4">Sections</h2>
+      <div className="w-48 glass sidebar-border p-4 space-y-3">
+        <h2 className="text-sm font-display font-semibold text-ghost-muted uppercase tracking-wider mb-4">
+          Sections
+        </h2>
         {sections.map((section, i) => (
           <button
             key={i}
             onClick={() => scrollToSection(section.title, textareaRef)}
-            className="w-full text-left"
+            className="w-full text-left group"
           >
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg transition-all duration-200 hover:bg-ghost-amber/5 hover:shadow-[0_0_12px_oklch(0.78_0.16_65/0.08)]">
               <div
-                className={`w-2 h-2 rounded-full ${section.isComplete ? "bg-green-500" : "bg-neutral-600"}`}
+                className={`w-2 h-2 rounded-full shrink-0 transition-all duration-300 ${
+                  section.isComplete
+                    ? "bg-ghost-amber shadow-[0_0_6px_oklch(0.78_0.16_65/0.4)]"
+                    : "bg-white/10"
+                }`}
               />
               <span
-                className={`text-sm ${section.isComplete ? "text-neutral-200" : "text-neutral-500"}`}
+                className={`text-sm transition-colors duration-200 ${
+                  section.isComplete
+                    ? "text-white/90"
+                    : "text-ghost-muted group-hover:text-white/60"
+                }`}
               >
                 {section.title}
               </span>
             </div>
           </button>
         ))}
-        <div className="pt-4 border-t border-neutral-800">
-          <div className="text-xs text-neutral-500">
-            {sections.filter((s) => s.isComplete).length} / {sections.length}{" "}
-            complete
+        <div className="pt-4 section-divider">
+          <div className="text-xs text-ghost-muted">
+            {completedCount} / {sections.length} complete
           </div>
-          <div className="mt-2 w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+          <div className="mt-2 w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
             <div
-              className="h-full bg-green-500 rounded-full transition-all"
-              style={{
-                width: `${sections.length ? (sections.filter((s) => s.isComplete).length / sections.length) * 100 : 0}%`,
-              }}
+              className="h-full progress-energy rounded-full transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
             />
           </div>
         </div>
@@ -77,13 +89,19 @@ export function Train() {
 
       {/* Editor */}
       <div className="flex-1 flex flex-col">
-        <div className="flex items-center justify-between px-6 py-3 border-b border-neutral-800">
-          <h1 className="text-lg font-medium">Character</h1>
-          <div className="text-xs text-neutral-500">
-            {saveStatus === "saving" && "Saving..."}
-            {saveStatus === "saved" && "Saved"}
+        <div className="flex items-center justify-between px-6 py-3 section-divider" style={{ borderTop: "none", borderBottom: "1px solid oklch(1 0 0 / 0.06)" }}>
+          <h1 className="text-lg font-display font-semibold text-amber-glow">
+            Character
+          </h1>
+          <div className="text-xs">
+            {saveStatus === "saving" && (
+              <span className="text-ghost-muted">Saving...</span>
+            )}
+            {saveStatus === "saved" && (
+              <span className="text-ghost-amber">Saved</span>
+            )}
             {saveStatus === "error" && (
-              <span className="text-red-400">Error saving</span>
+              <span className="text-ghost-rose">Error saving</span>
             )}
           </div>
         </div>
@@ -91,11 +109,11 @@ export function Train() {
           ref={textareaRef}
           value={content}
           onChange={(e) => handleChange(e.target.value)}
-          className="flex-1 p-6 bg-transparent text-neutral-100 font-mono text-sm leading-relaxed resize-none focus:outline-none"
+          className="flex-1 p-6 bg-transparent text-white/90 font-mono text-sm leading-relaxed resize-none focus:outline-none transition-shadow duration-300 focus:shadow-[0_4px_24px_-8px_oklch(0.78_0.16_65/0.1)]"
           placeholder="Start writing your character..."
           spellCheck={false}
         />
-        <div className="px-6 py-2 border-t border-neutral-800 text-xs text-neutral-500">
+        <div className="glass px-6 py-2 section-divider text-xs text-ghost-muted">
           {content.length} characters
         </div>
       </div>

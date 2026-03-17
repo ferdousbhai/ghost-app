@@ -140,19 +140,19 @@ export function Chat() {
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* Conversation list */}
-      <div className="w-56 border-r border-neutral-800 flex flex-col bg-neutral-900/50">
-        <div className="p-3 border-b border-neutral-800 space-y-2">
+      {/* Sidebar */}
+      <div className="w-56 glass sidebar-border flex flex-col">
+        <div className="p-3 section-divider space-y-2">
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search conversations..."
-            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-sm focus:outline-none focus:border-neutral-500 placeholder-neutral-500"
+            className="glass-input w-full px-3 py-1.5 text-sm font-body"
           />
           <button
             onClick={newConversation}
-            className="w-full px-3 py-2 text-sm bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+            className="btn-ghost w-full px-3 py-2 text-sm hover:text-ghost-amber transition-colors"
           >
             + New chat
           </button>
@@ -161,10 +161,10 @@ export function Chat() {
           {displayedConversations.map((conv) => (
             <div
               key={conv.id}
-              className={`group flex items-center px-3 py-2 text-sm cursor-pointer ${
+              className={`group flex items-center px-3 py-2 text-sm cursor-pointer transition-all duration-200 ${
                 activeId === conv.id
-                  ? "bg-neutral-800 text-white"
-                  : "text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200"
+                  ? "bg-ghost-amber/10 text-white border-l-2 border-ghost-amber"
+                  : "text-ghost-muted hover:bg-white/[0.03] hover:text-white/80 border-l-2 border-transparent"
               }`}
               onClick={() => setActiveId(conv.id)}
               onDoubleClick={() => startRename(conv)}
@@ -181,15 +181,15 @@ export function Chat() {
                   }}
                   onBlur={confirmRename}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex-1 min-w-0 px-1 py-0 bg-neutral-700 border border-neutral-600 rounded text-sm text-white focus:outline-none focus:border-neutral-400"
+                  className="glass-input flex-1 min-w-0 px-1 py-0 text-sm text-white"
                 />
               ) : (
-                <span className="flex-1 truncate">
+                <span className="flex-1 truncate font-body">
                   {conv.title || "Untitled"}
                 </span>
               )}
               {conv.message_count > 0 && renamingId !== conv.id && (
-                <span className="text-xs text-neutral-500 ml-1">
+                <span className="text-xs text-ghost-muted ml-1">
                   {conv.message_count}
                 </span>
               )}
@@ -198,14 +198,14 @@ export function Chat() {
                   e.stopPropagation();
                   handleDelete(conv.id);
                 }}
-                className="hidden group-hover:block text-neutral-500 hover:text-red-400 ml-1"
+                className="hidden group-hover:block text-ghost-muted hover:text-ghost-rose ml-1 transition-colors"
               >
                 &times;
               </button>
             </div>
           ))}
           {searchResults !== null && searchResults.length === 0 && (
-            <div className="px-3 py-4 text-xs text-neutral-500 text-center">
+            <div className="px-3 py-4 text-xs text-ghost-muted text-center font-body">
               No conversations found
             </div>
           )}
@@ -225,10 +225,10 @@ export function Chat() {
                   }`}
                 >
                   <div
-                    className={`max-w-[70%] px-4 py-2 rounded-2xl text-sm ${
+                    className={`max-w-[70%] px-4 py-2.5 rounded-2xl text-sm font-body ${
                       msg.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-neutral-800 text-neutral-100"
+                        ? "bg-ghost-amber/10 border border-ghost-amber/20 text-white animate-slide-right"
+                        : "glass text-white/90 animate-whisper-in"
                     }`}
                   >
                     {msg.content}
@@ -237,8 +237,13 @@ export function Chat() {
               ))}
               {loading && (
                 <div className="flex justify-start">
-                  <div className="px-4 py-2 rounded-2xl text-sm bg-neutral-800 text-neutral-400">
-                    Thinking...
+                  <div className="flex items-center gap-3 animate-whisper-in">
+                    <div className="relative w-5 h-5">
+                      <div className="absolute inset-0 rounded-full bg-white/10" style={{ animation: 'spectral-pulse 1.8s ease-in-out infinite' }} />
+                      <div className="absolute inset-[3px] rounded-full bg-white/20" style={{ animation: 'spectral-pulse 1.8s ease-in-out infinite 0.2s' }} />
+                      <div className="absolute inset-[6px] rounded-full bg-white/40" style={{ animation: 'spectral-pulse 1.8s ease-in-out infinite 0.4s' }} />
+                    </div>
+                    <span className="text-sm text-ghost-muted">Channeling...</span>
                   </div>
                 </div>
               )}
@@ -246,7 +251,7 @@ export function Chat() {
             </div>
 
             {/* Input */}
-            <div className="p-4 border-t border-neutral-800">
+            <div className="p-4 section-divider">
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
@@ -260,12 +265,12 @@ export function Chat() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Type a message..."
                   disabled={loading}
-                  className="flex-1 px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-xl text-sm focus:outline-none focus:border-neutral-500 disabled:opacity-50"
+                  className="glass-input flex-1 px-4 py-2.5 text-sm font-body disabled:opacity-50"
                 />
                 <button
                   type="submit"
                   disabled={loading || !input.trim()}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 rounded-xl text-sm font-medium transition-colors"
+                  className="btn-primary px-5 py-2.5 text-sm"
                 >
                   Send
                 </button>
@@ -273,10 +278,14 @@ export function Chat() {
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-neutral-500">
-            <div className="text-center">
-              <p className="text-lg font-medium">Ghost</p>
-              <p className="text-sm mt-1">
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center animate-materialize">
+              {/* Spectral orb */}
+              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-ghost-amber/5 border border-ghost-amber/10 animate-soul-breathe" />
+              <p className="text-3xl font-display text-amber-glow tracking-tight">
+                Ghost
+              </p>
+              <p className="text-sm mt-2 text-ghost-muted font-body">
                 Start a new conversation or select one from the sidebar
               </p>
             </div>

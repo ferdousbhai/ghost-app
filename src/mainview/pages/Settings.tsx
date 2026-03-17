@@ -94,26 +94,26 @@ export function Settings() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-8 max-w-2xl">
-      <h1 className="text-2xl font-semibold mb-6">Settings</h1>
+    <div className="flex-1 overflow-y-auto p-8 max-w-2xl animate-whisper-in">
+      <h1 className="text-2xl font-display mb-6">Settings</h1>
 
       {/* API Key */}
-      <section className="mb-8">
-        <h2 className="text-lg font-medium mb-3">Anthropic API Key</h2>
-        <p className="text-sm text-neutral-400 mb-4">
+      <section className="mb-8 glass-card p-5">
+        <h2 className="text-base font-display mb-3">Anthropic API Key</h2>
+        <p className="text-sm text-[var(--ghost-muted)] mb-4">
           Your API key is stored locally and never leaves your machine. Get one
           at{" "}
-          <span className="text-blue-400">console.anthropic.com</span>.
+          <span className="text-amber-glow">console.anthropic.com</span>.
         </p>
 
         {hasKey ? (
           <div className="flex items-center gap-3">
-            <div className="flex-1 px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-xl text-sm text-neutral-400">
+            <div className="glass-card flex-1 px-4 py-2 text-sm text-[var(--ghost-muted)] font-mono">
               sk-ant-...****
             </div>
             <button
               onClick={clearApiKey}
-              className="px-4 py-2 text-sm bg-red-900/30 text-red-400 hover:bg-red-900/50 rounded-xl transition-colors"
+              className="btn-danger px-4 py-2 text-sm"
             >
               Remove
             </button>
@@ -125,38 +125,38 @@ export function Settings() {
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="sk-ant-..."
-              className="flex-1 px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-xl text-sm focus:outline-none focus:border-neutral-500"
+              className="glass-input flex-1 px-4 py-2 text-sm"
             />
             <button
               onClick={saveApiKey}
               disabled={!apiKey.trim()}
-              className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl font-medium transition-colors"
+              className="btn-primary px-4 py-2 text-sm"
             >
               Save
             </button>
           </div>
         )}
         {saved && (
-          <p className="text-sm text-green-400 mt-2">API key saved.</p>
+          <p className="text-sm text-[var(--ghost-amber)] mt-2">API key saved.</p>
         )}
       </section>
 
       {/* Nostr Identity */}
-      <section className="mb-8">
-        <h2 className="text-lg font-medium mb-3">Nostr Identity</h2>
-        <p className="text-sm text-neutral-400 mb-4">
+      <section className="mb-8 glass-card p-5">
+        <h2 className="text-base font-display mb-3">Nostr Identity</h2>
+        <p className="text-sm text-[var(--ghost-muted)] mb-4">
           Your ghost's identity on the Nostr network. Used for P2P communication with other ghosts.
         </p>
 
         {identity ? (
           <div className="space-y-3">
             <div>
-              <div className="text-xs text-neutral-500 mb-1">Public Key (npub)</div>
-              <div className="px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-xl text-sm text-neutral-300 font-mono break-all">
+              <div className="text-xs text-[var(--ghost-muted)] mb-1">Public Key (npub)</div>
+              <div className="glass-card px-4 py-2 text-sm text-[var(--ghost-text)] font-mono break-all">
                 {identity.npub}
               </div>
             </div>
-            <div className="text-xs text-neutral-500">
+            <div className="text-xs text-[var(--ghost-muted)]">
               {identity.hasKey ? "Private key stored locally" : "No private key (read-only)"}
             </div>
           </div>
@@ -164,41 +164,41 @@ export function Settings() {
           <div className="space-y-4">
             <button
               onClick={handleGenerateKeypair}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-xl text-sm font-medium transition-colors"
+              className="btn-primary px-4 py-2 text-sm"
             >
               Generate new keypair
             </button>
-            <div className="text-sm text-neutral-500">or import an existing key:</div>
+            <div className="text-sm text-[var(--ghost-muted)]">or import an existing key:</div>
             <div className="flex gap-2">
               <input
                 type="password"
                 value={importNsec}
                 onChange={(e) => { setImportNsec(e.target.value); setIdentityError(""); }}
                 placeholder="nsec1..."
-                className="flex-1 px-4 py-2 bg-neutral-800 border border-neutral-700 rounded-xl text-sm focus:outline-none focus:border-neutral-500"
+                className="glass-input flex-1 px-4 py-2 text-sm"
               />
               <button
                 onClick={handleImportKeypair}
                 disabled={!importNsec.trim()}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-xl text-sm font-medium transition-colors"
+                className="btn-ghost px-4 py-2 text-sm"
               >
                 Import
               </button>
             </div>
-            {identityError && <p className="text-sm text-red-400">{identityError}</p>}
+            {identityError && <p className="text-sm text-[var(--ghost-rose)]">{identityError}</p>}
           </div>
         )}
       </section>
 
       {/* Nostr Relays */}
-      <section className="mb-8">
-        <h2 className="text-lg font-medium mb-3">Nostr Relays</h2>
-        <p className="text-sm text-neutral-400 mb-4">
+      <section className="mb-8 glass-card p-5">
+        <h2 className="text-base font-display mb-3">Nostr Relays</h2>
+        <p className="text-sm text-[var(--ghost-muted)] mb-4">
           Relays are how your ghost communicates with other ghosts.
         </p>
         <div className="flex items-center gap-3 mb-3">
-          <div className={`w-2 h-2 rounded-full ${relayStatus.connected > 0 ? "bg-green-500" : "bg-neutral-600"}`} />
-          <span className="text-sm text-neutral-300">
+          <div className={`w-2 h-2 rounded-full ${relayStatus.connected > 0 ? "bg-green-500" : "bg-[var(--ghost-amber)] animate-pulse"}`} />
+          <span className="text-sm">
             {relayStatus.connected > 0
               ? `Connected to ${relayStatus.connected} relay(s)`
               : "Disconnected"}
@@ -207,7 +207,7 @@ export function Settings() {
           {relayStatus.connected > 0 ? (
             <button
               onClick={handleDisconnectRelays}
-              className="px-3 py-1.5 text-sm text-neutral-400 hover:text-neutral-200 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+              className="btn-ghost px-3 py-1.5 text-sm"
             >
               Disconnect
             </button>
@@ -215,15 +215,15 @@ export function Settings() {
             <button
               onClick={handleConnectRelays}
               disabled={connecting}
-              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg font-medium transition-colors"
+              className="btn-primary px-3 py-1.5 text-sm"
             >
               {connecting ? "Connecting..." : "Connect"}
             </button>
           )}
         </div>
-        <div className="text-xs text-neutral-500 space-y-1">
+        <div className="glass-card p-3 text-xs text-[var(--ghost-muted)] space-y-1">
           <p>Default relays:</p>
-          <ul className="list-disc list-inside text-neutral-600">
+          <ul className="list-disc list-inside opacity-70">
             <li>wss://relay.damus.io</li>
             <li>wss://relay.nostr.band</li>
             <li>wss://nos.lol</li>
@@ -232,53 +232,53 @@ export function Settings() {
       </section>
 
       {/* Model */}
-      <section className="mb-8">
-        <h2 className="text-lg font-medium mb-3">Model</h2>
-        <div className="px-4 py-3 bg-neutral-800 border border-neutral-700 rounded-xl text-sm">
-          <span className="text-neutral-300">Claude Sonnet 4.6</span>
-          <span className="text-neutral-500 ml-2">
+      <section className="mb-8 glass-card p-5">
+        <h2 className="text-base font-display mb-3">Model</h2>
+        <div className="glass-card px-4 py-3 text-sm">
+          <span>Claude Sonnet 4.6</span>
+          <span className="text-[var(--ghost-muted)] ml-2">
             (claude-sonnet-4-6-20250514)
           </span>
         </div>
       </section>
 
       {/* About & Updates */}
-      <section>
-        <h2 className="text-lg font-medium mb-3">About</h2>
-        <div className="text-sm text-neutral-400 space-y-3">
+      <section className="glass-card p-5">
+        <h2 className="text-base font-display mb-3">About</h2>
+        <div className="text-sm text-[var(--ghost-muted)] space-y-3">
           <div className="flex items-center gap-3">
-            <span>Ghost v{appVersion}</span>
+            <span className="text-amber-glow">Ghost v{appVersion}</span>
             {updateStatus === "idle" && (
               <button
                 onClick={checkForUpdate}
-                className="px-3 py-1 text-xs bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+                className="btn-ghost px-3 py-1 text-xs"
               >
                 Check for updates
               </button>
             )}
             {updateStatus === "checking" && (
-              <span className="text-xs text-neutral-500">Checking...</span>
+              <span className="text-xs text-[var(--ghost-muted)]">Checking...</span>
             )}
             {updateStatus === "available" && (
               <button
                 onClick={downloadAndApply}
-                className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors"
+                className="btn-primary px-3 py-1 text-xs"
               >
                 Update available — install
               </button>
             )}
             {updateStatus === "downloading" && (
-              <span className="text-xs text-blue-400">Downloading update...</span>
+              <span className="text-xs text-[var(--ghost-amber)]">Downloading update...</span>
             )}
             {updateStatus === "ready" && (
-              <span className="text-xs text-green-400">Applying update...</span>
+              <span className="text-xs text-[var(--ghost-amber)]">Applying update...</span>
             )}
             {updateStatus === "error" && (
-              <span className="text-xs text-red-400">{updateError}</span>
+              <span className="text-xs text-[var(--ghost-rose)]">{updateError}</span>
             )}
           </div>
           <p>Local-first P2P AI agent</p>
-          <p className="text-neutral-500">MIT License</p>
+          <p className="opacity-50">MIT License</p>
         </div>
       </section>
     </div>

@@ -47,34 +47,34 @@ export function Peers() {
   const others = peers.filter(p => !p.is_following);
 
   return (
-    <div className="flex-1 overflow-y-auto p-8 max-w-3xl">
-      <h1 className="text-2xl font-semibold mb-2">Peers</h1>
-      <p className="text-sm text-neutral-400 mb-6">
+    <div className="flex-1 overflow-y-auto p-8 max-w-3xl animate-whisper-in">
+      <h1 className="text-2xl font-display mb-2">Peers</h1>
+      <p className="text-sm text-[var(--ghost-muted)] mb-6">
         Other ghosts you know on the Nostr network.
       </p>
 
       {/* Add peer */}
-      <div className="mb-8 p-4 bg-neutral-900 border border-neutral-800 rounded-xl space-y-3">
-        <div className="text-sm font-medium text-neutral-300">Add a peer</div>
+      <div className="mb-8 glass-card p-4 space-y-3">
+        <div className="text-sm font-display">Add a peer</div>
         <input
           type="text"
           value={addNpub}
           onChange={(e) => { setAddNpub(e.target.value); setError(""); }}
           placeholder="npub1..."
-          className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm font-mono focus:outline-none focus:border-neutral-500"
+          className="glass-input w-full px-3 py-2 text-sm font-mono"
         />
         <input
           type="text"
           value={addUsername}
           onChange={(e) => setAddUsername(e.target.value)}
           placeholder="Username (optional)"
-          className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-sm focus:outline-none focus:border-neutral-500"
+          className="glass-input w-full px-3 py-2 text-sm"
         />
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-[var(--ghost-rose)]">{error}</p>}
         <button
           onClick={handleAdd}
           disabled={!addNpub.trim()}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          className="btn-primary px-4 py-2 text-sm"
         >
           Add peer
         </button>
@@ -83,7 +83,7 @@ export function Peers() {
       {/* Following */}
       {following.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-medium text-neutral-400 mb-3">Following</h2>
+          <h2 className="text-sm font-display text-[var(--ghost-amber)] mb-3">Following</h2>
           <div className="space-y-2">
             {following.map((peer) => (
               <PeerCard key={peer.npub} peer={peer} onRemove={handleRemove} onFollow={handleFollow} onUnfollow={handleUnfollow} />
@@ -95,7 +95,7 @@ export function Peers() {
       {/* Other peers */}
       {others.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-medium text-neutral-400 mb-3">
+          <h2 className="text-sm font-display text-[var(--ghost-amber)] mb-3">
             {following.length > 0 ? "Other peers" : "Peers"}
           </h2>
           <div className="space-y-2">
@@ -107,8 +107,11 @@ export function Peers() {
       )}
 
       {peers.length === 0 && (
-        <div className="text-sm text-neutral-500 text-center py-8">
-          No peers yet. Add a ghost's npub to connect.
+        <div className="text-center py-12">
+          <div className="text-3xl mb-3 opacity-30">&#10024;</div>
+          <p className="text-sm text-[var(--ghost-muted)]">
+            No peers yet. Add a ghost's npub to connect.
+          </p>
         </div>
       )}
     </div>
@@ -122,35 +125,35 @@ function PeerCard({ peer, onRemove, onFollow, onUnfollow }: {
   onUnfollow: (npub: string) => void;
 }) {
   return (
-    <div className="group p-3 bg-neutral-900 border border-neutral-800 rounded-xl flex items-start gap-3">
+    <div className="group glass-card p-3 flex items-start gap-3 transition-shadow hover:shadow-[0_0_20px_oklch(0.78_0.16_65/0.08)]">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-neutral-200">
+          <span className="text-sm font-medium">
             {peer.username || "Unknown"}
           </span>
           {peer.is_following ? (
-            <span className="text-xs px-1.5 py-0.5 bg-blue-900/30 text-blue-400 rounded">following</span>
+            <span className="badge-follow text-xs px-1.5 py-0.5 rounded">following</span>
           ) : null}
         </div>
-        <div className="text-xs text-neutral-500 font-mono truncate mt-0.5">{peer.npub}</div>
-        {peer.about && <div className="text-xs text-neutral-400 mt-1">{peer.about}</div>}
+        <div className="text-xs text-[var(--ghost-muted)] font-mono truncate mt-0.5">{peer.npub}</div>
+        {peer.about && <div className="text-xs text-[var(--ghost-muted)] mt-1 opacity-80">{peer.about}</div>}
         {peer.last_message_at && (
-          <div className="text-xs text-neutral-600 mt-1">
+          <div className="text-xs opacity-40 mt-1">
             Last message: {new Date(peer.last_message_at * 1000).toLocaleDateString()}
           </div>
         )}
       </div>
       <div className="hidden group-hover:flex gap-1 shrink-0">
         {peer.is_following ? (
-          <button onClick={() => onUnfollow(peer.npub)} className="px-2 py-1 text-xs text-neutral-500 hover:text-neutral-300">
+          <button onClick={() => onUnfollow(peer.npub)} className="btn-ghost px-2 py-1 text-xs">
             Unfollow
           </button>
         ) : (
-          <button onClick={() => onFollow(peer.npub)} className="px-2 py-1 text-xs text-blue-400 hover:text-blue-300">
+          <button onClick={() => onFollow(peer.npub)} className="btn-primary px-2 py-1 text-xs">
             Follow
           </button>
         )}
-        <button onClick={() => onRemove(peer.npub)} className="px-2 py-1 text-xs text-neutral-500 hover:text-red-400">
+        <button onClick={() => onRemove(peer.npub)} className="px-2 py-1 text-xs text-[var(--ghost-muted)] hover:text-[var(--ghost-rose)] transition-colors">
           Remove
         </button>
       </div>

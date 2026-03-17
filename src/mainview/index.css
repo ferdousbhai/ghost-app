@@ -1,9 +1,372 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --ghost-bg: oklch(0.11 0.015 265);
+    --ghost-surface: oklch(0.14 0.012 265);
+    --ghost-card: oklch(0.17 0.01 265);
+    --ghost-border: oklch(0.24 0.01 265);
+    --ghost-border-light: oklch(1 0 0 / 0.08);
+    --ghost-text: oklch(0.95 0 0);
+    --ghost-muted: oklch(0.55 0.01 265);
+    --ghost-amber: oklch(0.78 0.16 65);
+    --ghost-orange: oklch(0.72 0.17 45);
+    --ghost-rose: oklch(0.65 0.2 15);
+  }
+
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+
+  html, body {
+    overflow-x: hidden;
+  }
+
   body {
-    @apply bg-neutral-950 text-neutral-100 antialiased;
+    background: var(--ghost-bg);
+    color: var(--ghost-text);
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Syne', sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', monospace !important;
+  }
+
+  *:focus-visible {
+    outline: 2px solid oklch(0.78 0.16 65 / 0.6);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: oklch(0.78 0.16 65 / 0.25);
+  }
+
+  ::placeholder {
+    color: oklch(0.45 0.01 265);
+  }
+}
+
+/* ─── Ambient Background Blobs ─── */
+.ambient-bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ambient-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0;
+  animation: ambient-drift ease-in-out infinite;
+}
+
+.ambient-blob-1 {
+  width: 500px;
+  height: 500px;
+  top: -15%;
+  left: -10%;
+  background: radial-gradient(circle, oklch(0.55 0.15 280 / 0.07), transparent 70%);
+  animation-duration: 18s;
+  opacity: 1;
+}
+
+.ambient-blob-2 {
+  width: 400px;
+  height: 400px;
+  bottom: -10%;
+  right: -5%;
+  background: radial-gradient(circle, oklch(0.65 0.12 45 / 0.05), transparent 70%);
+  animation-duration: 22s;
+  animation-delay: -5s;
+  opacity: 1;
+}
+
+.ambient-blob-3 {
+  width: 300px;
+  height: 300px;
+  top: 40%;
+  right: 20%;
+  background: radial-gradient(circle, oklch(0.55 0.1 320 / 0.04), transparent 70%);
+  animation-duration: 15s;
+  animation-delay: -8s;
+  opacity: 1;
+}
+
+/* ─── Glass Surface ─── */
+.glass {
+  background: oklch(1 0 0 / 0.03);
+  border: 1px solid oklch(1 0 0 / 0.06);
+  backdrop-filter: blur(12px);
+}
+
+.glass-card {
+  background: oklch(1 0 0 / 0.04);
+  border: 1px solid oklch(1 0 0 / 0.07);
+  border-radius: 14px;
+}
+
+.glass-input {
+  background: oklch(1 0 0 / 0.05);
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 12px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.glass-input:focus {
+  border-color: oklch(0.78 0.16 65 / 0.4);
+  box-shadow: 0 0 0 3px oklch(0.78 0.16 65 / 0.08);
+  outline: none;
+}
+
+/* ─── Buttons ─── */
+.btn-primary {
+  background: linear-gradient(135deg, oklch(0.78 0.16 65), oklch(0.72 0.17 45));
+  color: oklch(0.13 0.015 265);
+  font-weight: 600;
+  border-radius: 12px;
+  transition: all 0.2s;
+  box-shadow: 0 2px 12px oklch(0.78 0.16 65 / 0.2);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 4px 20px oklch(0.78 0.16 65 / 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active {
+  transform: scale(0.97);
+}
+
+.btn-primary:disabled {
+  opacity: 0.4;
+  transform: none;
+  box-shadow: none;
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid oklch(1 0 0 / 0.08);
+  border-radius: 12px;
+  color: oklch(0.7 0.01 265);
+  transition: all 0.2s;
+}
+
+.btn-ghost:hover {
+  background: oklch(1 0 0 / 0.05);
+  border-color: oklch(1 0 0 / 0.12);
+  color: oklch(0.9 0 0);
+}
+
+.btn-danger {
+  background: oklch(0.45 0.15 15 / 0.15);
+  color: oklch(0.7 0.18 20);
+  border: 1px solid oklch(0.55 0.15 15 / 0.2);
+  border-radius: 12px;
+  transition: all 0.2s;
+}
+
+.btn-danger:hover {
+  background: oklch(0.45 0.15 15 / 0.25);
+}
+
+/* ─── Nav ─── */
+.nav-item {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  transition: all 0.2s;
+  color: oklch(0.5 0.01 265);
+  position: relative;
+}
+
+.nav-item:hover {
+  color: oklch(0.8 0.01 265);
+  background: oklch(1 0 0 / 0.05);
+}
+
+.nav-item-active {
+  color: oklch(0.78 0.16 65);
+  background: oklch(0.78 0.16 65 / 0.1);
+}
+
+.nav-item-active::before {
+  content: '';
+  position: absolute;
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, oklch(0.78 0.16 65), oklch(0.72 0.17 45));
+  box-shadow: 0 0 8px oklch(0.78 0.16 65 / 0.5);
+}
+
+/* ─── Animations ─── */
+@keyframes ambient-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -20px) scale(1.05); }
+  66% { transform: translate(-20px, 15px) scale(0.95); }
+}
+
+@keyframes soul-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 20px oklch(0.78 0.16 65 / 0.1),
+      inset 0 0 10px oklch(0.78 0.16 65 / 0.03);
+  }
+  50% {
+    box-shadow:
+      0 0 30px oklch(0.78 0.16 65 / 0.2),
+      0 0 60px oklch(0.72 0.17 45 / 0.1),
+      inset 0 0 15px oklch(0.78 0.16 65 / 0.05);
+  }
+}
+
+@keyframes ghost-whisper-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes message-slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes spectral-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.85;
+  }
+}
+
+@keyframes spectral-glow {
+  0%, 100% { opacity: 0.4; transform: scale(2.5); }
+  50% { opacity: 0.7; transform: scale(3); }
+}
+
+@keyframes spectral-orbit {
+  from { transform: rotate(0deg) translateX(10px) rotate(0deg); }
+  to { transform: rotate(360deg) translateX(10px) rotate(-360deg); }
+}
+
+@keyframes energy-flow {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+
+@keyframes step-dot-glow {
+  0%, 100% { box-shadow: 0 0 4px oklch(0.78 0.16 65 / 0.3); }
+  50% { box-shadow: 0 0 10px oklch(0.78 0.16 65 / 0.6); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes ghost-materialize {
+  0% { opacity: 0; transform: scale(0.8); }
+  60% { opacity: 0.9; transform: scale(1.04); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ─── Utility Classes ─── */
+.animate-whisper-in {
+  animation: ghost-whisper-in 0.3s ease-out forwards;
+}
+
+.animate-slide-right {
+  animation: message-slide-right 0.25s ease-out forwards;
+}
+
+.animate-soul-breathe {
+  animation: soul-breathe 4s ease-in-out infinite;
+}
+
+.animate-materialize {
+  animation: ghost-materialize 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.4s ease-out forwards;
+}
+
+.text-amber-glow {
+  color: oklch(0.78 0.16 65);
+  text-shadow: 0 0 20px oklch(0.78 0.16 65 / 0.3);
+}
+
+.progress-energy {
+  background: linear-gradient(90deg, oklch(0.78 0.16 65), oklch(0.72 0.17 45), oklch(0.78 0.16 65));
+  background-size: 200% 100%;
+  animation: energy-flow 3s linear infinite;
+}
+
+.badge-follow {
+  background: oklch(0.78 0.16 65 / 0.12);
+  color: oklch(0.78 0.16 65);
+  border: 1px solid oklch(0.78 0.16 65 / 0.2);
+}
+
+.sidebar-border {
+  border-right: 1px solid oklch(1 0 0 / 0.06);
+}
+
+.section-divider {
+  border-top: 1px solid oklch(1 0 0 / 0.06);
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
   }
 }
