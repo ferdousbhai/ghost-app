@@ -28,6 +28,26 @@ No cloud. No subscription. No platform risk.
 
 See [spec.md](./spec.md) for the full specification.
 
+## Development
+
+```bash
+bun install
+bun run dev:hmr    # Dev with hot reload
+bun run start      # Dev without HMR
+bun run build      # Production build
+```
+
+## Packaging
+
+Builds are automated via GitHub Actions on tagged releases:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+This triggers builds for macOS, Linux, and Windows.
+
 ## Status
 
 Early development. See [issues](https://github.com/ferdousbhai/ghost-app/issues) for the roadmap.

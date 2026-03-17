@@ -13,11 +13,28 @@ export default {
       "dist/assets": "views/mainview/assets",
     },
     watchIgnore: ["dist/**"],
-    mac: { bundleCEF: false },
-    linux: { bundleCEF: false },
-    win: { bundleCEF: false },
+    mac: {
+      bundleCEF: false,
+      codesign: false,
+      notarize: false,
+      icon: "assets/icon.icns",
+    },
+    linux: {
+      bundleCEF: false,
+    },
+    win: {
+      bundleCEF: false,
+      icon: "assets/icon.ico",
+    },
   },
   runtime: {
     exitOnLastWindowClosed: true,
+  },
+  scripts: {
+    preBuild: "bun run vite build",
+  },
+  release: {
+    baseUrl:
+      "https://github.com/ferdousbhai/ghost-app/releases/latest/download",
   },
 } satisfies ElectrobunConfig;
