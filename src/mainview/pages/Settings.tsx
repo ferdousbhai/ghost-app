@@ -10,11 +10,15 @@ export function Settings() {
   const [identityError, setIdentityError] = useState("");
   const [relayStatus, setRelayStatus] = useState<{ connected: number; relays: string[] }>({ connected: 0, relays: [] });
   const [connecting, setConnecting] = useState(false);
+  const [appVersion, setAppVersion] = useState("...");
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "error">("idle");
+  const [updateError, setUpdateError] = useState("");
 
   useEffect(() => {
     rpc.request.hasApiKey({}).then(setHasKey);
     rpc.request.getIdentity({}).then(setIdentity);
     rpc.request.getRelayStatus({}).then(setRelayStatus);
+    rpc.request.getAppVersion({}).then(setAppVersion);
   }, []);
 
   async function saveApiKey() {
@@ -58,6 +62,35 @@ export function Settings() {
   async function handleDisconnectRelays() {
     await rpc.request.disconnectRelays({});
     setRelayStatus({ connected: 0, relays: relayStatus.relays });
+  }
+
+  async function checkForUpdate() {
+    setUpdateStatus("checking");
+    setUpdateError("");
+    const result = await rpc.request.checkForUpdate({});
+    if (result.updateAvailable) {
+      setUpdateStatus("available");
+    } else {
+      setUpdateStatus("idle");
+    }
+  }
+
+  async function downloadAndApply() {
+    setUpdateStatus("downloading");
+    setUpdateError("");
+    const dlResult = await rpc.request.downloadUpdate({});
+    if (!dlResult.success) {
+      setUpdateStatus("error");
+      setUpdateError(dlResult.error || "Download failed");
+      return;
+    }
+    setUpdateStatus("ready");
+    const applyResult = await rpc.request.applyUpdate({});
+    if (!applyResult.success) {
+      setUpdateStatus("error");
+      setUpdateError(applyResult.error || "Update failed");
+    }
+    // If successful, app will relaunch automatically
   }
 
   return (
@@ -209,11 +242,41 @@ export function Settings() {
         </div>
       </section>
 
-      {/* About */}
+      {/* About & Updates */}
       <section>
         <h2 className="text-lg font-medium mb-3">About</h2>
-        <div className="text-sm text-neutral-400 space-y-1">
-          <p>Ghost v0.1.0</p>
+        <div className="text-sm text-neutral-400 space-y-3">
+          <div className="flex items-center gap-3">
+            <span>Ghost v{appVersion}</span>
+            {updateStatus === "idle" && (
+              <button
+                onClick={checkForUpdate}
+                className="px-3 py-1 text-xs bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
+              >
+                Check for updates
+              </button>
+            )}
+            {updateStatus === "checking" && (
+              <span className="text-xs text-neutral-500">Checking...</span>
+            )}
+            {updateStatus === "available" && (
+              <button
+                onClick={downloadAndApply}
+                className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors"
+              >
+                Update available — install
+              </button>
+            )}
+            {updateStatus === "downloading" && (
+              <span className="text-xs text-blue-400">Downloading update...</span>
+            )}
+            {updateStatus === "ready" && (
+              <span className="text-xs text-green-400">Applying update...</span>
+            )}
+            {updateStatus === "error" && (
+              <span className="text-xs text-red-400">{updateError}</span>
+            )}
+          </div>
           <p>Local-first P2P AI agent</p>
           <p className="text-neutral-500">MIT License</p>
         </div>

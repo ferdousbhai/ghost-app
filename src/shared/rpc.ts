@@ -162,6 +162,12 @@ export type GhostRPC = {
         params: { recipientNpub: string; content: string; conversationId: string };
         response: { success: boolean; publishedTo: number } | { error: string };
       };
+
+      // Updates
+      checkForUpdate: { params: {}; response: { updateAvailable: boolean; currentVersion: string; latestVersion?: string } };
+      downloadUpdate: { params: {}; response: { success: boolean; error?: string } };
+      applyUpdate: { params: {}; response: { success: boolean; error?: string } };
+      getAppVersion: { params: {}; response: string };
     };
     messages: {};
   };

@@ -597,6 +597,44 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         return { connected: relayManager.connectedCount, relays: relayManager.configuredRelays };
       },
 
+      // Updates
+      checkForUpdate: async () => {
+        try {
+          const info = await Updater.checkForUpdate();
+          const versionInfo = await Updater.localInfo.version();
+          return {
+            updateAvailable: info.updateAvailable,
+            currentVersion: versionInfo,
+            latestVersion: info.updateAvailable ? "newer version available" : undefined,
+          };
+        } catch (err: any) {
+          return { updateAvailable: false, currentVersion: "dev", latestVersion: undefined };
+        }
+      },
+      downloadUpdate: async () => {
+        try {
+          await Updater.downloadUpdate();
+          return { success: true };
+        } catch (err: any) {
+          return { success: false, error: err.message || "Download failed" };
+        }
+      },
+      applyUpdate: async () => {
+        try {
+          await Updater.applyUpdate();
+          return { success: true };
+        } catch (err: any) {
+          return { success: false, error: err.message || "Update failed" };
+        }
+      },
+      getAppVersion: async () => {
+        try {
+          return await Updater.localInfo.version();
+        } catch {
+          return "0.1.0-dev";
+        }
+      },
+
       // Nostr DMs
       sendDM: async ({ recipientNpub, content, conversationId }) => {
         const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
