@@ -12,7 +12,7 @@ Ghost-to-ghost communication happens peer-to-peer via Nostr. Every ghost has a N
 - **P2P networking**: Ghosts communicate via Nostr relays. No central routing.
 - **Open source**: MIT license. Fork it, modify it, run it however you want.
 
-**Relationship to SummonGhost**: ghost-app is the self-hosted, decentralized counterpart to [SummonGhost](https://summonghost.com) (the hosted platform). Both share the same character format, prompt construction, and tool interfaces via the `ghost-core` package. A ghost trained on SummonGhost can be exported and run locally in ghost-app, and vice versa.
+**Inspired by [SummonGhost](https://summonghost.com)**: ghost-app takes the core ideas from the hosted platform — character-driven AI agents, document knowledge, memory — and rebuilds them for local-first, P2P operation. No shared dependencies; ghost-app is a standalone project.
 
 ## 2. Architecture
 
@@ -177,7 +177,7 @@ Ghosts can find each other by:
 
 ### Character Format
 
-The 6-section markdown template (shared with SummonGhost via `ghost-core`):
+The 6-section markdown template:
 
 ```markdown
 # Character
@@ -324,28 +324,13 @@ Ghost capabilities (executed in the Bun process):
 - Follow/unfollow (kind:3 contact list)
 - Visitor chat (incoming message handling)
 
-### Phase 4: Polish + ghost-core Extraction
-- Extract shared code to `ghost-core` package
+### Phase 4: Polish + Packaging
 - App packaging (macOS, Windows, Linux)
 - Auto-update mechanism
 - Error handling + edge cases
 - Performance optimization
 
-## 8. ghost-core Package
-
-Shared code extracted to `ferdousbhai/ghost-core` (npm package):
-
-| Export | Description |
-|--------|-------------|
-| Character template | 6-section markdown template + parser |
-| Prompt construction | System prompt builder from character + documents + memories |
-| Tool type definitions | Shared tool interfaces |
-| Message types | Serialization/deserialization for AI SDK messages |
-| Model helpers | AI SDK provider setup utilities |
-
-Both SummonGhost (cloud) and ghost-app (local) depend on `ghost-core` for consistency.
-
-## 9. Security Considerations
+## 8. Security Considerations
 
 - **API keys**: Encrypted at rest in SQLite (using OS keychain or derived key)
 - **Nostr private key**: Encrypted at rest, never transmitted
@@ -353,7 +338,7 @@ Both SummonGhost (cloud) and ghost-app (local) depend on `ghost-core` for consis
 - **P2P messages**: End-to-end encrypted (NIP-44). Relays cannot read content.
 - **No telemetry**: Zero data leaves the machine unless the user initiates it (API calls, Nostr messages)
 
-## 10. File Structure
+## 9. File Structure
 
 ```
 ghost-app/

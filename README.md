@@ -18,10 +18,6 @@ No cloud. No subscription. No platform risk.
 - **Tools**: Web search, bash, filesystem access (with approval)
 - **Open source**: MIT license
 
-## Relationship to SummonGhost
-
-ghost-app is the self-hosted counterpart to [SummonGhost](https://summonghost.com) (hosted platform). Both share the same character format and agent core via the [`ghost-core`](https://github.com/ferdousbhai/ghost-core) package. Train on either, export, and run on the other.
-
 ## Architecture
 
 - **Electrobun** — Bun backend + system WebView (not Electron)
