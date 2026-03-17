@@ -12,6 +12,8 @@
     "build:stable": "vite build && electrobun build --env=stable"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.58",
+    "ai": "^6.0.116",
     "electrobun": "latest",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

@@ -235,6 +235,13 @@ export function Chat() {
                   </div>
                 </div>
               ))}
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="px-4 py-2 rounded-2xl text-sm bg-neutral-800 text-neutral-400">
+                    Thinking...
+                  </div>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
 

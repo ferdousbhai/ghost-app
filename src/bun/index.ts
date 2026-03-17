@@ -2,7 +2,54 @@ import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import Database from "bun:sqlite";
+import { generateText } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import type { GhostRPC, Conversation, ChatMessage } from "../shared/rpc";
+
+const DEFAULT_CHARACTER_TEMPLATE = `# Character
+
+This is where you teach your AI who you are. The more you share, the better it represents you.
+
+## About Me
+
+*Who are you? What's your story? Give people context about you.*
+
+[Replace this with a brief intro — your name, what you do, where you're based]
+
+## Personality
+
+*Are you friendly? Direct? Funny? Thoughtful? How do you approach problems?*
+
+[Replace this with a few sentences about your personality]
+
+## Communication Style
+
+*Do you prefer casual or professional? Short replies or detailed explanations? Use humor or emojis?*
+
+[Replace this with how you naturally talk]
+
+## Expertise
+
+*What are you good at? What do you do for work? What topics can you help people with?*
+
+[Replace this with your skills and background]
+
+## Guidelines
+
+*What should your AI avoid? Any topics that are off-limits or things you'd never say?*
+
+[Replace this with any boundaries]
+
+## Example Responses
+
+*Show your AI exactly how you'd reply. This teaches it your voice.*
+
+> **Visitor:** Hey, what are you working on?
+> **Me:** [Replace with how you'd actually answer this]
+
+> **Visitor:** What do you think about AI?
+> **Me:** [Replace with your real opinion]
+`;
 
 // ---------------------------------------------------------------------------
 // Data directory + SQLite
@@ -118,13 +165,17 @@ const stmts = {
   searchConversations: db.prepare(
     "SELECT c.* FROM conversations c JOIN conversations_fts f ON c.rowid = f.rowid WHERE conversations_fts MATCH ? ORDER BY c.updated_at DESC"
   ),
+  getCharacter: db.prepare("SELECT value FROM config WHERE key = 'character'"),
+  saveCharacter: db.prepare(
+    "INSERT INTO config (key, value, updated_at) VALUES ('character', ?, unixepoch()) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()"
+  ),
 };
 
 // ---------------------------------------------------------------------------
 // RPC handlers
 // ---------------------------------------------------------------------------
 const rpc = BrowserView.defineRPC<GhostRPC>({
-  maxRequestTime: 30000, // 30s for AI responses
+  maxRequestTime: 120000, // 2 min for AI responses
   handlers: {
     requests: {
       // Config
@@ -166,24 +217,74 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         return stmts.getMessages.all(conversationId) as ChatMessage[];
       },
 
-      // Chat — placeholder until AI SDK integration (issue #4)
-      sendMessage: ({ conversationId, content }) => {
+      // Chat — AI SDK generateText (issue #4)
+      sendMessage: async ({ conversationId, content }) => {
         const msgId = crypto.randomUUID();
         stmts.insertMessage.run(msgId, conversationId, "user", content);
         stmts.updateMessageCount.run(conversationId, conversationId);
 
-        // TODO: Issue #4 — AI SDK streamText integration
-        // For now, echo back a placeholder assistant message
-        const replyId = crypto.randomUUID();
-        stmts.insertMessage.run(
-          replyId,
-          conversationId,
-          "assistant",
-          "I'm your ghost, but I don't have an AI backend yet. Add your API key in Settings and wait for the AI integration."
-        );
-        stmts.updateMessageCount.run(conversationId, conversationId);
+        // Check for API key
+        const apiKeyRow = stmts.getConfig.get("api_key") as { value: string } | null;
+        if (!apiKeyRow?.value) {
+          const replyId = crypto.randomUUID();
+          stmts.insertMessage.run(
+            replyId,
+            conversationId,
+            "assistant",
+            "Please add your Anthropic API key in Settings to start chatting."
+          );
+          stmts.updateMessageCount.run(conversationId, conversationId);
+          return { messageId: msgId };
+        }
+
+        // Load conversation history for context
+        const history = stmts.getMessages.all(conversationId) as ChatMessage[];
+        const aiMessages = history
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+        // Load character (system prompt)
+        const characterRow = stmts.getConfig.get("character") as { value: string } | null;
+        const systemPrompt = characterRow?.value || "You are a helpful AI assistant.";
+
+        // Generate response
+        try {
+          const anthropic = createAnthropic({ apiKey: apiKeyRow.value });
+          const { text } = await generateText({
+            model: anthropic("claude-sonnet-4-6-20250514"),
+            system: systemPrompt,
+            messages: aiMessages,
+            maxOutputTokens: 4096,
+          });
+
+          const replyId = crypto.randomUUID();
+          stmts.insertMessage.run(replyId, conversationId, "assistant", text);
+          stmts.updateMessageCount.run(conversationId, conversationId);
+
+          // Auto-title: use first user message as title for untitled conversations
+          const conv = stmts.getConversation.get(conversationId) as Conversation | null;
+          if (conv && !conv.title) {
+            const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+            stmts.renameConversation.run(title, conversationId);
+          }
+        } catch (err: any) {
+          const replyId = crypto.randomUUID();
+          const errorMsg = `Error: ${err.message || "Failed to generate response"}`;
+          stmts.insertMessage.run(replyId, conversationId, "assistant", errorMsg);
+          stmts.updateMessageCount.run(conversationId, conversationId);
+        }
 
         return { messageId: msgId };
+      },
+
+      // Character
+      getCharacter: () => {
+        const row = stmts.getCharacter.get() as { value: string } | null;
+        return row?.value || DEFAULT_CHARACTER_TEMPLATE;
+      },
+      saveCharacter: ({ content }) => {
+        stmts.saveCharacter.run(content);
+        return { success: true };
       },
 
       // Settings

@@ -74,6 +74,10 @@ export type GhostRPC = {
         response: { messageId: string };
       };
 
+      // Character
+      getCharacter: { params: {}; response: string };
+      saveCharacter: { params: { content: string }; response: { success: boolean } };
+
       // Settings
       hasApiKey: { params: {}; response: boolean };
     };
