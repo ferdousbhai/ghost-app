@@ -18,6 +18,13 @@ export type ChatMessage = {
   created_at: number;
 };
 
+/** A memory key-value pair. */
+export type Memory = {
+  key: string;
+  value: string;
+  updated_at: number;
+};
+
 /** Conversation metadata. */
 export type Conversation = {
   id: string;
@@ -77,6 +84,19 @@ export type GhostRPC = {
       // Character
       getCharacter: { params: {}; response: string };
       saveCharacter: { params: { content: string }; response: { success: boolean } };
+
+      // Onboarding
+      isOnboarded: { params: {}; response: boolean };
+      completeOnboarding: { params: {}; response: { success: boolean } };
+
+      // Memories
+      listMemories: { params: {}; response: Memory[] };
+      setMemory: {
+        params: { key: string; value: string };
+        response: { success: boolean; previousValue: string | null };
+      };
+      deleteMemory: { params: { key: string }; response: { success: boolean } };
+      searchMemories: { params: { query: string }; response: Memory[] };
 
       // Settings
       hasApiKey: { params: {}; response: boolean };

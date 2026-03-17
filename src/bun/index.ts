@@ -4,7 +4,7 @@ import { join } from "path";
 import Database from "bun:sqlite";
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import type { GhostRPC, Conversation, ChatMessage } from "../shared/rpc";
+import type { GhostRPC, Conversation, ChatMessage, Memory } from "../shared/rpc";
 
 const DEFAULT_CHARACTER_TEMPLATE = `# Character
 
@@ -116,6 +116,21 @@ db.exec(`
     updated_at INTEGER NOT NULL DEFAULT (unixepoch())
   );
 
+  CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(key, value, content='memories', content_rowid='rowid');
+
+  CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
+    INSERT INTO memories_fts(rowid, key, value) VALUES (new.rowid, new.key, new.value);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, key, value) VALUES('delete', old.rowid, old.key, old.value);
+    INSERT INTO memories_fts(rowid, key, value) VALUES (new.rowid, new.key, new.value);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
+    INSERT INTO memories_fts(memories_fts, rowid, key, value) VALUES('delete', old.rowid, old.key, old.value);
+  END;
+
   CREATE TABLE IF NOT EXISTS peers (
     npub TEXT PRIMARY KEY,
     username TEXT,
@@ -164,6 +179,19 @@ const stmts = {
   ),
   searchConversations: db.prepare(
     "SELECT c.* FROM conversations c JOIN conversations_fts f ON c.rowid = f.rowid WHERE conversations_fts MATCH ? ORDER BY c.updated_at DESC"
+  ),
+  listMemories: db.prepare(
+    "SELECT key, value, updated_at FROM memories ORDER BY updated_at DESC"
+  ),
+  getMemory: db.prepare(
+    "SELECT key, value, updated_at FROM memories WHERE key = ?"
+  ),
+  setMemory: db.prepare(
+    "INSERT INTO memories (key, value, updated_at) VALUES (?, ?, unixepoch()) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = unixepoch()"
+  ),
+  deleteMemory: db.prepare("DELETE FROM memories WHERE key = ?"),
+  searchMemories: db.prepare(
+    "SELECT m.key, m.value, m.updated_at FROM memories m JOIN memories_fts f ON m.rowid = f.rowid WHERE memories_fts MATCH ? ORDER BY m.updated_at DESC LIMIT 20"
   ),
   getCharacter: db.prepare("SELECT value FROM config WHERE key = 'character'"),
   saveCharacter: db.prepare(
@@ -285,6 +313,38 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
       saveCharacter: ({ content }) => {
         stmts.saveCharacter.run(content);
         return { success: true };
+      },
+
+      // Onboarding
+      isOnboarded: () => {
+        const row = stmts.getConfig.get("onboarded") as { value: string } | null;
+        return row?.value === "true";
+      },
+      completeOnboarding: () => {
+        stmts.setConfig.run("onboarded", "true");
+        return { success: true };
+      },
+
+      // Memories
+      listMemories: () => {
+        return stmts.listMemories.all() as Memory[];
+      },
+      setMemory: ({ key, value }) => {
+        const existing = stmts.getMemory.get(key) as Memory | null;
+        stmts.setMemory.run(key, value);
+        return { success: true, previousValue: existing?.value ?? null };
+      },
+      deleteMemory: ({ key }) => {
+        stmts.deleteMemory.run(key);
+        return { success: true };
+      },
+      searchMemories: ({ query }) => {
+        const ftsQuery = query.trim().replace(/"/g, '""');
+        try {
+          return stmts.searchMemories.all(`"${ftsQuery}"*`) as Memory[];
+        } catch {
+          return [];
+        }
       },
 
       // Settings

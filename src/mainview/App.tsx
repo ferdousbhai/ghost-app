@@ -1,12 +1,34 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { rpc } from "./rpc";
 import { Chat } from "./pages/Chat";
 import { Train } from "./pages/Train";
 import { Settings } from "./pages/Settings";
+import { Onboarding } from "./pages/Onboarding";
 
 type Page = "chat" | "train" | "settings";
 
 function App() {
   const [page, setPage] = useState<Page>("chat");
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    rpc.request.isOnboarded({}).then(setOnboarded);
+  }, []);
+
+  if (onboarded === null) {
+    return <div className="h-screen bg-neutral-950" />;
+  }
+
+  if (!onboarded) {
+    return (
+      <Onboarding
+        onComplete={(goToTrain) => {
+          setOnboarded(true);
+          if (goToTrain) setPage("train");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="flex h-screen">
