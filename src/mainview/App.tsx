@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Chat } from "./pages/Chat";
+import { Train } from "./pages/Train";
 import { Settings } from "./pages/Settings";
 
 type Page = "chat" | "train" | "settings";
@@ -82,7 +83,7 @@ function App() {
       {/* Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {page === "chat" && <Chat />}
-        {page === "train" && <TrainPlaceholder />}
+        {page === "train" && <Train />}
         {page === "settings" && <Settings />}
       </main>
     </div>
@@ -112,17 +113,6 @@ function NavButton({
     >
       {icon}
     </button>
-  );
-}
-
-function TrainPlaceholder() {
-  return (
-    <div className="flex-1 flex items-center justify-center text-neutral-500">
-      <div className="text-center">
-        <p className="text-lg font-medium">Character Editor</p>
-        <p className="text-sm mt-1">Coming soon (Issue #5)</p>
-      </div>
-    </div>
   );
 }
 
