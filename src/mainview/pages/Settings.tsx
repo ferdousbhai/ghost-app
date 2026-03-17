@@ -13,6 +13,7 @@ export function Settings() {
   const [appVersion, setAppVersion] = useState("...");
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "error">("idle");
   const [updateError, setUpdateError] = useState("");
+  const [backupCopied, setBackupCopied] = useState(false);
 
   useEffect(() => {
     rpc.request.hasApiKey({}).then(setHasKey);
@@ -152,9 +153,31 @@ export function Settings() {
                 {identity.npub}
               </div>
             </div>
-            <div className="text-xs text-[var(--ghost-muted)]">
-              {identity.hasKey ? "Private key stored locally" : "No private key (read-only)"}
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-[var(--ghost-muted)]">
+                {identity.hasKey ? "Private key stored locally" : "No private key (read-only)"}
+              </span>
+              {identity.hasKey && (
+                <button
+                  onClick={async () => {
+                    const nsec = await rpc.request.exportNsec({});
+                    if (nsec) {
+                      await navigator.clipboard.writeText(nsec);
+                      setBackupCopied(true);
+                      setTimeout(() => setBackupCopied(false), 3000);
+                    }
+                  }}
+                  className="btn-ghost px-2 py-1 text-xs"
+                >
+                  {backupCopied ? "Copied!" : "Backup key"}
+                </button>
+              )}
             </div>
+            {backupCopied && (
+              <p className="text-xs text-[var(--ghost-amber)] mt-2">
+                nsec copied to clipboard. Store it somewhere safe — this is the only way to restore your ghost's identity.
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">

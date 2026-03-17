@@ -19,7 +19,8 @@
     "electrobun": "latest",
     "nostr-tools": "^2.23.3",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/bun": "latest",

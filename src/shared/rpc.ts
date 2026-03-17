@@ -151,6 +151,7 @@ export type GhostRPC = {
       generateKeypair: { params: {}; response: { npub: string; nsec: string } };
       importKeypair: { params: { nsec: string }; response: { npub: string } | { error: string } };
       getIdentity: { params: {}; response: { npub: string; hasKey: boolean } | null };
+      exportNsec: { params: {}; response: string | null };
 
       // Nostr relay
       connectRelays: { params: {}; response: { connected: number; total: number } };

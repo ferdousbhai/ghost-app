@@ -2,9 +2,8 @@ import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import Database from "bun:sqlite";
-import { generateText, tool } from "ai";
+import { generateText, tool, jsonSchema } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { z } from "zod";
 import type { GhostRPC, Conversation, ChatMessage, Memory, Document, Peer } from "../shared/rpc";
 import { getDocsDir, indexDocuments, readDocument, watchDocs } from "./documents";
 import { readFile as readFileFromDisk, writeFile as writeFileToDisk, editFile as editFileOnDisk, executeBash, approveToolCall as approveToolCallFn, denyToolCall as denyToolCallFn, getPendingToolCalls as getPendingToolCallsFn } from "./tools";
@@ -367,34 +366,46 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
             tools: {
               read_file: tool({
                 description: "Read the contents of a file at the given path.",
-                parameters: z.object({
-                  path: z.string().describe("Absolute path to the file to read"),
+                parameters: jsonSchema({
+                  type: "object" as const,
+                  properties: { path: { type: "string", description: "Absolute path to the file to read" } },
+                  required: ["path"],
                 }),
-                execute: async ({ path }) => readFileFromDisk(path),
+                execute: async ({ path }: { path: string }) => readFileFromDisk(path),
               }),
               write_file: tool({
                 description: "Write content to a file. Creates the file and any parent directories if they don't exist.",
-                parameters: z.object({
-                  path: z.string().describe("Absolute path to the file to write"),
-                  content: z.string().describe("The content to write to the file"),
+                parameters: jsonSchema({
+                  type: "object" as const,
+                  properties: {
+                    path: { type: "string", description: "Absolute path to the file to write" },
+                    content: { type: "string", description: "The content to write to the file" },
+                  },
+                  required: ["path", "content"],
                 }),
-                execute: async ({ path, content }) => writeFileToDisk(path, content),
+                execute: async ({ path, content }: { path: string; content: string }) => writeFileToDisk(path, content),
               }),
               edit_file: tool({
                 description: "Find and replace text in a file. The old_text must match exactly.",
-                parameters: z.object({
-                  path: z.string().describe("Absolute path to the file to edit"),
-                  old_text: z.string().describe("The exact text to find and replace"),
-                  new_text: z.string().describe("The text to replace it with"),
+                parameters: jsonSchema({
+                  type: "object" as const,
+                  properties: {
+                    path: { type: "string", description: "Absolute path to the file to edit" },
+                    old_text: { type: "string", description: "The exact text to find and replace" },
+                    new_text: { type: "string", description: "The text to replace it with" },
+                  },
+                  required: ["path", "old_text", "new_text"],
                 }),
-                execute: async ({ path, old_text, new_text }) => editFileOnDisk(path, old_text, new_text),
+                execute: async ({ path, old_text, new_text }: { path: string; old_text: string; new_text: string }) => editFileOnDisk(path, old_text, new_text),
               }),
               bash: tool({
                 description: "Execute a bash command on the user's machine. Use for file operations, system info, package management, running scripts, etc.",
-                parameters: z.object({
-                  command: z.string().describe("The bash command to execute"),
+                parameters: jsonSchema({
+                  type: "object" as const,
+                  properties: { command: { type: "string", description: "The bash command to execute" } },
+                  required: ["command"],
                 }),
-                execute: async ({ command }) => executeBash(command),
+                execute: async ({ command }: { command: string }) => executeBash(command),
               }),
             },
           });
@@ -553,6 +564,10 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
         if (!npubRow?.value) return null;
         return { npub: npubRow.value, hasKey: !!nsecRow?.value };
+      },
+      exportNsec: () => {
+        const row = stmts.getConfig.get("nsec") as { value: string } | null;
+        return row?.value ?? null;
       },
 
       // Nostr relay
