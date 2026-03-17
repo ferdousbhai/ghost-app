@@ -30,9 +30,7 @@ export default {
   runtime: {
     exitOnLastWindowClosed: true,
   },
-  scripts: {
-    preBuild: "bun run vite build",
-  },
+  scripts: {},
   release: {
     baseUrl:
       "https://github.com/ferdousbhai/ghost-app/releases/latest/download",
