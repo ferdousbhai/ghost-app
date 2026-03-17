@@ -151,6 +151,17 @@ export type GhostRPC = {
       generateKeypair: { params: {}; response: { npub: string; nsec: string } };
       importKeypair: { params: { nsec: string }; response: { npub: string } | { error: string } };
       getIdentity: { params: {}; response: { npub: string; hasKey: boolean } | null };
+
+      // Nostr relay
+      connectRelays: { params: {}; response: { connected: number; total: number } };
+      disconnectRelays: { params: {}; response: { success: boolean } };
+      getRelayStatus: { params: {}; response: { connected: number; relays: string[] } };
+
+      // Nostr DMs
+      sendDM: {
+        params: { recipientNpub: string; content: string; conversationId: string };
+        response: { success: boolean; publishedTo: number } | { error: string };
+      };
     };
     messages: {};
   };

@@ -25,6 +25,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   }
 
   async function finish(goToTrain: boolean) {
+    // Auto-generate Nostr keypair if not already set
+    const identity = await rpc.request.getIdentity({});
+    if (!identity) {
+      await rpc.request.generateKeypair({});
+    }
     await rpc.request.completeOnboarding({});
     onComplete(goToTrain);
   }

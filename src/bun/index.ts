@@ -9,6 +9,9 @@ import type { GhostRPC, Conversation, ChatMessage, Memory, Document, Peer } from
 import { getDocsDir, indexDocuments, readDocument, watchDocs } from "./documents";
 import { readFile as readFileFromDisk, writeFile as writeFileToDisk, editFile as editFileOnDisk, executeBash, approveToolCall as approveToolCallFn, denyToolCall as denyToolCallFn, getPendingToolCalls as getPendingToolCallsFn } from "./tools";
 import { generateKeypair as genKeypair, identityFromNsec } from "./nostr";
+import { nip19 } from "nostr-tools";
+import { RelayManager } from "./relay";
+import { createGiftWrap, unwrapGiftWrap } from "./encryption";
 
 const DEFAULT_CHARACTER_TEMPLATE = `# Character
 
@@ -239,6 +242,45 @@ console.log(`Indexed ${initialCount} documents from ${docsDir}`);
 watchDocs(db, docsDir);
 
 // ---------------------------------------------------------------------------
+// Relay manager (initialized lazily on first connect)
+// ---------------------------------------------------------------------------
+let relayManager: RelayManager | null = null;
+
+function getRelayManager(): RelayManager {
+  if (!relayManager) {
+    relayManager = new RelayManager(undefined, (event, relay) => {
+      // Handle incoming gift-wrapped DMs
+      const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
+      if (!nsecRow?.value) return;
+
+      const unwrapped = unwrapGiftWrap(nsecRow.value, event);
+      if (!unwrapped) return;
+
+      console.log(
+        `Received DM from ${unwrapped.senderPubkey}: ${unwrapped.message.content.slice(0, 50)}...`
+      );
+
+      // Ensure conversation exists
+      const convId = unwrapped.message.conversationId;
+      try {
+        stmts.createConversation.get(
+          convId,
+          `DM from ${unwrapped.senderPubkey.slice(0, 8)}...`
+        );
+      } catch {
+        // Conversation may already exist
+      }
+
+      // Store as incoming message
+      const msgId = crypto.randomUUID();
+      stmts.insertMessage.run(msgId, convId, "user", unwrapped.message.content);
+      stmts.updateMessageCount.run(convId, convId);
+    });
+  }
+  return relayManager;
+}
+
+// ---------------------------------------------------------------------------
 // RPC handlers
 // ---------------------------------------------------------------------------
 const rpc = BrowserView.defineRPC<GhostRPC>({
@@ -463,6 +505,34 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
       getPendingToolCalls: ({ conversationId: _conversationId }) => {
         // For now return all pending (later filter by conversation)
         return getPendingToolCallsFn();
+      },
+
+      // Peers
+      listPeers: () => {
+        return stmts.listPeers.all() as Peer[];
+      },
+      addPeer: ({ npub, username }) => {
+        if (!npub.startsWith("npub1")) {
+          return { error: "Invalid npub. Must start with 'npub1'" };
+        }
+        try {
+          stmts.addPeer.run(npub, username ?? null);
+          return { success: true };
+        } catch (err: any) {
+          return { error: err.message || "Failed to add peer" };
+        }
+      },
+      removePeer: ({ npub }) => {
+        stmts.removePeer.run(npub);
+        return { success: true };
+      },
+      followPeer: ({ npub }) => {
+        stmts.followPeer.run(npub);
+        return { success: true };
+      },
+      unfollowPeer: ({ npub }) => {
+        stmts.unfollowPeer.run(npub);
+        return { success: true };
       },
 
       // Settings
