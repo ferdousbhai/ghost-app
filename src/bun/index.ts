@@ -2,10 +2,12 @@ import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
 import { mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import Database from "bun:sqlite";
-import { generateText } from "ai";
+import { generateText, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { z } from "zod";
 import type { GhostRPC, Conversation, ChatMessage, Memory, Document } from "../shared/rpc";
 import { getDocsDir, indexDocuments, readDocument, watchDocs } from "./documents";
+import { readFile as readFileFromDisk, writeFile as writeFileToDisk, editFile as editFileOnDisk } from "./tools";
 
 const DEFAULT_CHARACTER_TEMPLATE = `# Character
 
@@ -313,6 +315,39 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
             system: systemPrompt,
             messages: aiMessages,
             maxOutputTokens: 4096,
+            maxSteps: 5,
+            tools: {
+              read_file: tool({
+                description: "Read the contents of a file at the given path.",
+                parameters: z.object({
+                  path: z.string().describe("Absolute path to the file to read"),
+                }),
+                execute: async ({ path }) => {
+                  return readFileFromDisk(path);
+                },
+              }),
+              write_file: tool({
+                description: "Write content to a file. Creates the file and any parent directories if they don't exist.",
+                parameters: z.object({
+                  path: z.string().describe("Absolute path to the file to write"),
+                  content: z.string().describe("The content to write to the file"),
+                }),
+                execute: async ({ path, content }) => {
+                  return writeFileToDisk(path, content);
+                },
+              }),
+              edit_file: tool({
+                description: "Find and replace text in a file. The old_text must match exactly.",
+                parameters: z.object({
+                  path: z.string().describe("Absolute path to the file to edit"),
+                  old_text: z.string().describe("The exact text to find and replace"),
+                  new_text: z.string().describe("The text to replace it with"),
+                }),
+                execute: async ({ path, old_text, new_text }) => {
+                  return editFileOnDisk(path, old_text, new_text);
+                },
+              }),
+            },
           });
 
           const replyId = crypto.randomUUID();
