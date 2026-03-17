@@ -47,6 +47,21 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_messages_conversation
     ON messages(conversation_id, created_at);
 
+  CREATE VIRTUAL TABLE IF NOT EXISTS conversations_fts USING fts5(title, content='conversations', content_rowid='rowid');
+
+  CREATE TRIGGER IF NOT EXISTS conversations_ai AFTER INSERT ON conversations BEGIN
+    INSERT INTO conversations_fts(rowid, title) VALUES (new.rowid, new.title);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS conversations_au AFTER UPDATE ON conversations BEGIN
+    INSERT INTO conversations_fts(conversations_fts, rowid, title) VALUES('delete', old.rowid, old.title);
+    INSERT INTO conversations_fts(rowid, title) VALUES (new.rowid, new.title);
+  END;
+
+  CREATE TRIGGER IF NOT EXISTS conversations_ad AFTER DELETE ON conversations BEGIN
+    INSERT INTO conversations_fts(conversations_fts, rowid, title) VALUES('delete', old.rowid, old.title);
+  END;
+
   CREATE TABLE IF NOT EXISTS memories (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -97,6 +112,12 @@ const stmts = {
   updateMessageCount: db.prepare(
     "UPDATE conversations SET message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?), updated_at = unixepoch() WHERE id = ?"
   ),
+  renameConversation: db.prepare(
+    "UPDATE conversations SET title = ?, updated_at = unixepoch() WHERE id = ?"
+  ),
+  searchConversations: db.prepare(
+    "SELECT c.* FROM conversations c JOIN conversations_fts f ON c.rowid = f.rowid WHERE conversations_fts MATCH ? ORDER BY c.updated_at DESC"
+  ),
 };
 
 // ---------------------------------------------------------------------------
@@ -129,6 +150,15 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
       deleteConversation: ({ id }) => {
         stmts.deleteConversation.run(id);
         return { success: true };
+      },
+      renameConversation: ({ id, title }) => {
+        stmts.renameConversation.run(title, id);
+        return { success: true };
+      },
+      searchConversations: ({ query }) => {
+        // Append * for prefix matching in FTS5
+        const ftsQuery = query.trim().replace(/"/g, '""');
+        return stmts.searchConversations.all(`"${ftsQuery}"*`) as Conversation[];
       },
 
       // Messages

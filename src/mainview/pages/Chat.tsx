@@ -1,6 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { rpc } from "../rpc";
 import type { ChatMessage, Conversation } from "../../shared/rpc";
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
+}
 
 export function Chat() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -8,12 +17,32 @@ export function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Conversation[] | null>(
+    null
+  );
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
+
+  const debouncedSearch = useDebounce(searchQuery, 300);
 
   // Load conversations on mount
   useEffect(() => {
     rpc.request.listConversations({}).then(setConversations);
   }, []);
+
+  // Search conversations when debounced query changes
+  useEffect(() => {
+    if (debouncedSearch.trim()) {
+      rpc.request
+        .searchConversations({ query: debouncedSearch })
+        .then(setSearchResults);
+    } else {
+      setSearchResults(null);
+    }
+  }, [debouncedSearch]);
 
   // Load messages when conversation changes
   useEffect(() => {
@@ -28,6 +57,14 @@ export function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Focus rename input when renaming starts
+  useEffect(() => {
+    if (renamingId) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [renamingId]);
 
   async function newConversation() {
     const id = crypto.randomUUID();
@@ -76,11 +113,43 @@ export function Chat() {
     }
   }
 
+  function startRename(conv: Conversation) {
+    setRenamingId(conv.id);
+    setRenameValue(conv.title || "");
+  }
+
+  async function confirmRename() {
+    if (!renamingId) return;
+    const title = renameValue.trim();
+    if (title) {
+      await rpc.request.renameConversation({ id: renamingId, title });
+      setConversations((prev) =>
+        prev.map((c) => (c.id === renamingId ? { ...c, title } : c))
+      );
+    }
+    setRenamingId(null);
+    setRenameValue("");
+  }
+
+  function cancelRename() {
+    setRenamingId(null);
+    setRenameValue("");
+  }
+
+  const displayedConversations = searchResults ?? conversations;
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Conversation list */}
       <div className="w-56 border-r border-neutral-800 flex flex-col bg-neutral-900/50">
-        <div className="p-3 border-b border-neutral-800">
+        <div className="p-3 border-b border-neutral-800 space-y-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search conversations..."
+            className="w-full px-3 py-1.5 bg-neutral-800 border border-neutral-700 rounded-lg text-sm focus:outline-none focus:border-neutral-500 placeholder-neutral-500"
+          />
           <button
             onClick={newConversation}
             className="w-full px-3 py-2 text-sm bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors"
@@ -89,7 +158,7 @@ export function Chat() {
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {conversations.map((conv) => (
+          {displayedConversations.map((conv) => (
             <div
               key={conv.id}
               className={`group flex items-center px-3 py-2 text-sm cursor-pointer ${
@@ -98,10 +167,32 @@ export function Chat() {
                   : "text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200"
               }`}
               onClick={() => setActiveId(conv.id)}
+              onDoubleClick={() => startRename(conv)}
             >
-              <span className="flex-1 truncate">
-                {conv.title || "Untitled"}
-              </span>
+              {renamingId === conv.id ? (
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") confirmRename();
+                    if (e.key === "Escape") cancelRename();
+                  }}
+                  onBlur={confirmRename}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 min-w-0 px-1 py-0 bg-neutral-700 border border-neutral-600 rounded text-sm text-white focus:outline-none focus:border-neutral-400"
+                />
+              ) : (
+                <span className="flex-1 truncate">
+                  {conv.title || "Untitled"}
+                </span>
+              )}
+              {conv.message_count > 0 && renamingId !== conv.id && (
+                <span className="text-xs text-neutral-500 ml-1">
+                  {conv.message_count}
+                </span>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -113,6 +204,11 @@ export function Chat() {
               </button>
             </div>
           ))}
+          {searchResults !== null && searchResults.length === 0 && (
+            <div className="px-3 py-4 text-xs text-neutral-500 text-center">
+              No conversations found
+            </div>
+          )}
         </div>
       </div>
 

@@ -53,6 +53,14 @@ export type GhostRPC = {
         params: { id: string };
         response: { success: boolean };
       };
+      renameConversation: {
+        params: { id: string; title: string };
+        response: { success: boolean };
+      };
+      searchConversations: {
+        params: { query: string };
+        response: Conversation[];
+      };
 
       // Messages
       getMessages: {
