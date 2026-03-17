@@ -10,7 +10,6 @@
     --ghost-surface: oklch(0.14 0.012 265);
     --ghost-card: oklch(0.17 0.01 265);
     --ghost-border: oklch(0.24 0.01 265);
-    --ghost-border-light: oklch(1 0 0 / 0.08);
     --ghost-text: oklch(0.95 0 0);
     --ghost-muted: oklch(0.55 0.01 265);
     --ghost-amber: oklch(0.78 0.16 65);
@@ -274,16 +273,6 @@
     transform: scale(1.15);
     opacity: 0.85;
   }
-}
-
-@keyframes spectral-glow {
-  0%, 100% { opacity: 0.4; transform: scale(2.5); }
-  50% { opacity: 0.7; transform: scale(3); }
-}
-
-@keyframes spectral-orbit {
-  from { transform: rotate(0deg) translateX(10px) rotate(0deg); }
-  to { transform: rotate(360deg) translateX(10px) rotate(-360deg); }
 }
 
 @keyframes energy-flow {

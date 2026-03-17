@@ -5,18 +5,19 @@ import {
   type Event as NostrEvent,
 } from "nostr-tools";
 
+/** Derive a NIP-44 conversation key from an nsec and a counterpart's hex pubkey. */
+function deriveConversationKey(nsec: string, pubkeyHex: string): Uint8Array {
+  const { data: sk } = nip19.decode(nsec);
+  return nip44.v2.utils.getConversationKey(sk as Uint8Array, pubkeyHex);
+}
+
 /** Encrypt a message using NIP-44. */
 export function encryptMessage(
   senderNsec: string,
   recipientPubkeyHex: string,
   plaintext: string
 ): string {
-  const { data: sk } = nip19.decode(senderNsec);
-  const conversationKey = nip44.v2.utils.getConversationKey(
-    sk as Uint8Array,
-    recipientPubkeyHex
-  );
-  return nip44.v2.encrypt(plaintext, conversationKey);
+  return nip44.v2.encrypt(plaintext, deriveConversationKey(senderNsec, recipientPubkeyHex));
 }
 
 /** Decrypt a NIP-44 encrypted message. */
@@ -25,12 +26,7 @@ export function decryptMessage(
   senderPubkeyHex: string,
   ciphertext: string
 ): string {
-  const { data: sk } = nip19.decode(receiverNsec);
-  const conversationKey = nip44.v2.utils.getConversationKey(
-    sk as Uint8Array,
-    senderPubkeyHex
-  );
-  return nip44.v2.decrypt(ciphertext, conversationKey);
+  return nip44.v2.decrypt(ciphertext, deriveConversationKey(receiverNsec, senderPubkeyHex));
 }
 
 export type GiftWrapMessage = {
@@ -47,17 +43,9 @@ export function createGiftWrap(
   message: GiftWrapMessage
 ): NostrEvent {
   const { data: sk } = nip19.decode(senderNsec);
+  const encrypted = encryptMessage(senderNsec, recipientPubkeyHex, JSON.stringify(message));
 
-  // Encrypt inner content (kind:14 sealed DM per NIP-17)
-  const innerContent = JSON.stringify(message);
-  const encrypted = encryptMessage(
-    senderNsec,
-    recipientPubkeyHex,
-    innerContent
-  );
-
-  // Outer event (kind:1059 gift wrap)
-  const event = finalizeEvent(
+  return finalizeEvent(
     {
       kind: 1059,
       created_at: Math.floor(Date.now() / 1000),
@@ -66,8 +54,6 @@ export function createGiftWrap(
     },
     sk as Uint8Array
   );
-
-  return event;
 }
 
 /** Unwrap a kind:1059 gift-wrapped message. */

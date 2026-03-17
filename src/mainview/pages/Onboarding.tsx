@@ -34,8 +34,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     onComplete(goToTrain);
   }
 
-  const totalSteps = 4;
-
   const steps = [
     // Step 0: Welcome
     <div key="welcome" className="text-center animate-slide-up" style={{ animationDelay: '0.1s', animationFillMode: 'both' }}>
@@ -173,19 +171,18 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         <div className="glass-card p-10">
           {/* Step dots */}
           <div className="flex justify-center gap-2 mb-10">
-            {Array.from({ length: totalSteps }, (_, i) => (
-              <div
-                key={i}
-                className={`w-2 h-2 rounded-full transition-all duration-300 ${
-                  i === step
-                    ? "bg-ghost-amber"
-                    : i < step
-                    ? "bg-ghost-amber/40"
-                    : "bg-white/10"
-                }`}
-                style={i === step ? { animation: 'step-dot-glow 2s ease-in-out infinite' } : undefined}
-              />
-            ))}
+            {Array.from({ length: steps.length }, (_, i) => {
+              let dotClass = "bg-white/10";
+              if (i === step) dotClass = "bg-ghost-amber";
+              else if (i < step) dotClass = "bg-ghost-amber/40";
+              return (
+                <div
+                  key={i}
+                  className={`w-2 h-2 rounded-full transition-all duration-300 ${dotClass}`}
+                  style={i === step ? { animation: 'step-dot-glow 2s ease-in-out infinite' } : undefined}
+                />
+              );
+            })}
           </div>
           {steps[step]}
         </div>

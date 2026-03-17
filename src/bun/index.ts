@@ -8,8 +8,7 @@ import { z } from "zod";
 import type { GhostRPC, Conversation, ChatMessage, Memory, Document, Peer } from "../shared/rpc";
 import { getDocsDir, indexDocuments, readDocument, watchDocs } from "./documents";
 import { readFile as readFileFromDisk, writeFile as writeFileToDisk, editFile as editFileOnDisk, executeBash, approveToolCall as approveToolCallFn, denyToolCall as denyToolCallFn, getPendingToolCalls as getPendingToolCallsFn } from "./tools";
-import { generateKeypair as genKeypair, identityFromNsec } from "./nostr";
-import { nip19 } from "nostr-tools";
+import { generateKeypair as genKeypair, identityFromNsec, npubToHex } from "./nostr";
 import { RelayManager } from "./relay";
 import { createGiftWrap, unwrapGiftWrap } from "./encryption";
 
@@ -371,9 +370,7 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
                 parameters: z.object({
                   path: z.string().describe("Absolute path to the file to read"),
                 }),
-                execute: async ({ path }) => {
-                  return readFileFromDisk(path);
-                },
+                execute: async ({ path }) => readFileFromDisk(path),
               }),
               write_file: tool({
                 description: "Write content to a file. Creates the file and any parent directories if they don't exist.",
@@ -381,9 +378,7 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
                   path: z.string().describe("Absolute path to the file to write"),
                   content: z.string().describe("The content to write to the file"),
                 }),
-                execute: async ({ path, content }) => {
-                  return writeFileToDisk(path, content);
-                },
+                execute: async ({ path, content }) => writeFileToDisk(path, content),
               }),
               edit_file: tool({
                 description: "Find and replace text in a file. The old_text must match exactly.",
@@ -392,18 +387,14 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
                   old_text: z.string().describe("The exact text to find and replace"),
                   new_text: z.string().describe("The text to replace it with"),
                 }),
-                execute: async ({ path, old_text, new_text }) => {
-                  return editFileOnDisk(path, old_text, new_text);
-                },
+                execute: async ({ path, old_text, new_text }) => editFileOnDisk(path, old_text, new_text),
               }),
               bash: tool({
                 description: "Execute a bash command on the user's machine. Use for file operations, system info, package management, running scripts, etc.",
                 parameters: z.object({
                   command: z.string().describe("The bash command to execute"),
                 }),
-                execute: async ({ command }) => {
-                  return await executeBash(command);
-                },
+                execute: async ({ command }) => executeBash(command),
               }),
             },
           });
@@ -502,8 +493,7 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         denyToolCallFn(callId);
         return { success: true };
       },
-      getPendingToolCalls: ({ conversationId: _conversationId }) => {
-        // For now return all pending (later filter by conversation)
+      getPendingToolCalls: (_params) => {
         return getPendingToolCallsFn();
       },
 
@@ -537,10 +527,8 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
 
       // Settings
       hasApiKey: () => {
-        const row = stmts.getConfig.get("api_key") as {
-          value: string;
-        } | null;
-        return row?.value ? true : false;
+        const row = stmts.getConfig.get("api_key") as { value: string } | null;
+        return !!row?.value;
       },
 
       // Nostr identity
@@ -575,10 +563,10 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         // Subscribe to DMs if we have an identity
         const npubRow = stmts.getConfig.get("npub") as { value: string } | null;
         if (npubRow?.value) {
-          const { data: pk } = nip19.decode(npubRow.value);
+          const pubkeyHex = npubToHex(npubRow.value);
           const lastSync = stmts.getConfig.get("last_nostr_sync") as { value: string } | null;
           const since = lastSync ? parseInt(lastSync.value) : undefined;
-          mgr.subscribeToDMs(pk as string, since);
+          mgr.subscribeToDMs(pubkeyHex, since);
           // Update last sync time
           stmts.setConfig.run("last_nostr_sync", String(Math.floor(Date.now() / 1000)));
         }
@@ -607,7 +595,7 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
             currentVersion: versionInfo,
             latestVersion: info.updateAvailable ? "newer version available" : undefined,
           };
-        } catch (err: any) {
+        } catch {
           return { updateAvailable: false, currentVersion: "dev", latestVersion: undefined };
         }
       },
@@ -641,8 +629,8 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         if (!nsecRow?.value) return { error: "No Nostr identity. Generate a keypair first." };
 
         try {
-          const { data: recipientPk } = nip19.decode(recipientNpub);
-          const event = createGiftWrap(nsecRow.value, recipientPk as string, {
+          const recipientPkHex = npubToHex(recipientNpub);
+          const event = createGiftWrap(nsecRow.value, recipientPkHex, {
             type: "chat",
             content,
             conversationId,

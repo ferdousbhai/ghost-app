@@ -1,5 +1,4 @@
-import { Relay, type Filter } from "nostr-tools";
-import type { Event as NostrEvent } from "nostr-tools";
+import { Relay, type Filter, type Event as NostrEvent } from "nostr-tools";
 
 const DEFAULT_RELAYS = [
   "wss://relay.damus.io",

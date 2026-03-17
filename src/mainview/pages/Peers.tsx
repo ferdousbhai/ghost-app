@@ -131,9 +131,9 @@ function PeerCard({ peer, onRemove, onFollow, onUnfollow }: {
           <span className="text-sm font-medium">
             {peer.username || "Unknown"}
           </span>
-          {peer.is_following ? (
+          {peer.is_following > 0 && (
             <span className="badge-follow text-xs px-1.5 py-0.5 rounded">following</span>
-          ) : null}
+          )}
         </div>
         <div className="text-xs text-[var(--ghost-muted)] font-mono truncate mt-0.5">{peer.npub}</div>
         {peer.about && <div className="text-xs text-[var(--ghost-muted)] mt-1 opacity-80">{peer.about}</div>}

@@ -174,7 +174,7 @@ export function Memories() {
                 <div className="hidden group-hover:flex gap-1 shrink-0">
                   <button
                     onClick={() => startEdit(mem)}
-                    className="px-2 py-1 text-xs text-[var(--ghost-amber)] hover:text-[var(--ghost-amber)] opacity-70 hover:opacity-100 transition-opacity"
+                    className="px-2 py-1 text-xs text-[var(--ghost-amber)] opacity-70 hover:opacity-100 transition-opacity"
                   >
                     Edit
                   </button>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { rpc } from "../rpc";
 import type { ChatMessage, Conversation } from "../../shared/rpc";
 

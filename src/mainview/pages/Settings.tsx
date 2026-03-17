@@ -68,11 +68,7 @@ export function Settings() {
     setUpdateStatus("checking");
     setUpdateError("");
     const result = await rpc.request.checkForUpdate({});
-    if (result.updateAvailable) {
-      setUpdateStatus("available");
-    } else {
-      setUpdateStatus("idle");
-    }
+    setUpdateStatus(result.updateAvailable ? "available" : "idle");
   }
 
   async function downloadAndApply() {
@@ -248,34 +244,12 @@ export function Settings() {
         <div className="text-sm text-[var(--ghost-muted)] space-y-3">
           <div className="flex items-center gap-3">
             <span className="text-amber-glow">Ghost v{appVersion}</span>
-            {updateStatus === "idle" && (
-              <button
-                onClick={checkForUpdate}
-                className="btn-ghost px-3 py-1 text-xs"
-              >
-                Check for updates
-              </button>
-            )}
-            {updateStatus === "checking" && (
-              <span className="text-xs text-[var(--ghost-muted)]">Checking...</span>
-            )}
-            {updateStatus === "available" && (
-              <button
-                onClick={downloadAndApply}
-                className="btn-primary px-3 py-1 text-xs"
-              >
-                Update available — install
-              </button>
-            )}
-            {updateStatus === "downloading" && (
-              <span className="text-xs text-[var(--ghost-amber)]">Downloading update...</span>
-            )}
-            {updateStatus === "ready" && (
-              <span className="text-xs text-[var(--ghost-amber)]">Applying update...</span>
-            )}
-            {updateStatus === "error" && (
-              <span className="text-xs text-[var(--ghost-rose)]">{updateError}</span>
-            )}
+            <UpdateStatusIndicator
+              status={updateStatus}
+              error={updateError}
+              onCheck={checkForUpdate}
+              onInstall={downloadAndApply}
+            />
           </div>
           <p>Local-first P2P AI agent</p>
           <p className="opacity-50">MIT License</p>
@@ -283,4 +257,34 @@ export function Settings() {
       </section>
     </div>
   );
+}
+
+function UpdateStatusIndicator({ status, error, onCheck, onInstall }: {
+  status: "idle" | "checking" | "available" | "downloading" | "ready" | "error";
+  error: string;
+  onCheck: () => void;
+  onInstall: () => void;
+}) {
+  switch (status) {
+    case "idle":
+      return (
+        <button onClick={onCheck} className="btn-ghost px-3 py-1 text-xs">
+          Check for updates
+        </button>
+      );
+    case "checking":
+      return <span className="text-xs text-[var(--ghost-muted)]">Checking...</span>;
+    case "available":
+      return (
+        <button onClick={onInstall} className="btn-primary px-3 py-1 text-xs">
+          Update available — install
+        </button>
+      );
+    case "downloading":
+      return <span className="text-xs text-[var(--ghost-amber)]">Downloading update...</span>;
+    case "ready":
+      return <span className="text-xs text-[var(--ghost-amber)]">Applying update...</span>;
+    case "error":
+      return <span className="text-xs text-[var(--ghost-rose)]">{error}</span>;
+  }
 }

@@ -17,6 +17,13 @@ export function generateKeypair(): NostrIdentity {
   };
 }
 
+/** Decode an npub to its hex public key. */
+export function npubToHex(npub: string): string {
+  const { type, data } = nip19.decode(npub);
+  if (type !== "npub") throw new Error("Invalid npub");
+  return data as string;
+}
+
 /** Decode an nsec string to get the full identity. */
 export function identityFromNsec(nsec: string): NostrIdentity {
   const { type, data } = nip19.decode(nsec);

@@ -42,14 +42,12 @@ function App() {
 
   return (
     <div className="flex h-screen relative">
-      {/* Ambient background */}
       <div className="ambient-bg">
         <div className="ambient-blob ambient-blob-1" />
         <div className="ambient-blob ambient-blob-2" />
         <div className="ambient-blob ambient-blob-3" />
       </div>
 
-      {/* Navigation */}
       <nav className="w-[56px] flex flex-col items-center py-4 gap-1.5 sidebar-border relative z-10">
         <NavButton
           label="Chat"
@@ -90,7 +88,6 @@ function App() {
         />
       </nav>
 
-      {/* Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative z-10">
         {page === "chat" && <Chat />}
         {page === "documents" && <Documents />}
