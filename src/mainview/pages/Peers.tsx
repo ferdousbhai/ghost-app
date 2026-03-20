@@ -83,7 +83,10 @@ export function Peers() {
       {/* Following */}
       {following.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-display text-[var(--ghost-amber)] mb-3">Following</h2>
+          <div className="mb-3">
+            <h2 className="text-sm font-display text-[var(--ghost-amber)]">Following</h2>
+            <div className="mt-1 h-px w-8" style={{ background: 'linear-gradient(to right, oklch(0.78 0.16 65 / 0.5), transparent)' }} />
+          </div>
           <div className="space-y-2">
             {following.map((peer) => (
               <PeerCard key={peer.npub} peer={peer} onRemove={handleRemove} onFollow={handleFollow} onUnfollow={handleUnfollow} />
@@ -95,9 +98,12 @@ export function Peers() {
       {/* Other peers */}
       {others.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-display text-[var(--ghost-amber)] mb-3">
-            {following.length > 0 ? "Other peers" : "Peers"}
-          </h2>
+          <div className="mb-3">
+            <h2 className="text-sm font-display text-[var(--ghost-amber)]">
+              {following.length > 0 ? "Other peers" : "Peers"}
+            </h2>
+            <div className="mt-1 h-px w-8" style={{ background: 'linear-gradient(to right, oklch(0.78 0.16 65 / 0.5), transparent)' }} />
+          </div>
           <div className="space-y-2">
             {others.map((peer) => (
               <PeerCard key={peer.npub} peer={peer} onRemove={handleRemove} onFollow={handleFollow} onUnfollow={handleUnfollow} />
@@ -108,7 +114,11 @@ export function Peers() {
 
       {peers.length === 0 && (
         <div className="text-center py-12">
-          <div className="text-3xl mb-3 opacity-30">&#10024;</div>
+          <svg className="mx-auto mb-3 w-10 h-10 opacity-20 text-[var(--ghost-amber)]" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <circle cx="16" cy="20" r="10" />
+            <circle cx="24" cy="20" r="10" />
+            <circle cx="20" cy="14" r="10" />
+          </svg>
           <p className="text-sm text-[var(--ghost-muted)]">
             No peers yet. Add a ghost's npub to connect.
           </p>
@@ -126,13 +136,23 @@ function PeerCard({ peer, onRemove, onFollow, onUnfollow }: {
 }) {
   return (
     <div className="group glass-card p-3 flex items-start gap-3 transition-shadow hover:shadow-[0_0_20px_oklch(0.78_0.16_65/0.08)]">
+      {/* Avatar placeholder */}
+      <div
+        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-display"
+        style={{ background: 'oklch(0.78 0.16 65 / 0.12)', color: 'oklch(0.78 0.16 65)' }}
+      >
+        {(peer.username || "?")[0].toUpperCase()}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">
             {peer.username || "Unknown"}
           </span>
           {peer.is_following > 0 && (
-            <span className="badge-follow text-xs px-1.5 py-0.5 rounded">following</span>
+            <span
+              className="badge-follow text-xs px-1.5 py-0.5 rounded"
+              style={{ boxShadow: '0 0 8px oklch(0.78 0.16 65 / 0.25)' }}
+            >following</span>
           )}
         </div>
         <div className="text-xs text-[var(--ghost-muted)] font-mono truncate mt-0.5">{peer.npub}</div>

@@ -16,14 +16,14 @@ export function getDocsDir(dataDir: string): string {
 }
 
 /** Extract title from markdown (first # heading) or filename. */
-function extractTitle(content: string, filePath: string): string {
+export function extractTitle(content: string, filePath: string): string {
   const match = content.match(/^#\s+(.+)$/m);
   if (match) return match[1].trim();
   return filePath.split("/").pop()?.replace(/\.[^.]+$/, "") || filePath;
 }
 
 /** Compute content hash for change detection. */
-function hashContent(content: string): string {
+export function hashContent(content: string): string {
   return createHash("sha256").update(content).digest("hex").slice(0, 16);
 }
 

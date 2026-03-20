@@ -1,13 +1,14 @@
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
-import { mkdirSync, existsSync } from "fs";
-import { join } from "path";
+import { mkdirSync, existsSync, writeFileSync, readFileSync } from "fs";
+import { join, dirname, resolve } from "path";
 import Database from "bun:sqlite";
-import { generateText, tool, jsonSchema } from "ai";
+import { streamText, tool, jsonSchema, stepCountIs } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { GhostRPC, Conversation, ChatMessage, Memory, Document, Peer } from "../shared/rpc";
-import { getDocsDir, indexDocuments, readDocument, watchDocs } from "./documents";
+import { getDocsDir, indexDocuments, readDocument, watchDocs, extractTitle, hashContent } from "./documents";
 import { readFile as readFileFromDisk, writeFile as writeFileToDisk, editFile as editFileOnDisk, executeBash, approveToolCall as approveToolCallFn, denyToolCall as denyToolCallFn, getPendingToolCalls as getPendingToolCallsFn } from "./tools";
 import { generateKeypair as genKeypair, identityFromNsec, npubToHex } from "./nostr";
+import { buildSystemPrompt } from "./prompt";
 import { RelayManager } from "./relay";
 import { createGiftWrap, unwrapGiftWrap } from "./encryption";
 
@@ -235,9 +236,258 @@ const stmts = {
 // Document indexing + file watcher
 // ---------------------------------------------------------------------------
 const docsDir = getDocsDir(dataDir);
+const docsDirPrefix = docsDir.endsWith("/") ? docsDir : docsDir + "/";
 const initialCount = indexDocuments(db, docsDir);
 console.log(`Indexed ${initialCount} documents from ${docsDir}`);
 watchDocs(db, docsDir);
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+/** Sanitize a query for FTS5 prefix search. */
+function ftsQuery(query: string): string {
+  return `"${query.trim().replace(/"/g, '""')}"*`;
+}
+
+/** Validate a relative path resolves within docsDir. Returns full path or null. */
+function resolveDocPath(relPath: string): string | null {
+  const full = resolve(docsDir, relPath);
+  if (!full.startsWith(docsDirPrefix)) return null;
+  return full;
+}
+
+/** Index a single document (avoids full directory rescan). */
+const upsertDoc = db.prepare(
+  "INSERT INTO documents (path, title, content_hash, indexed_at) VALUES (?, ?, ?, unixepoch()) ON CONFLICT(path) DO UPDATE SET title = excluded.title, content_hash = excluded.content_hash, indexed_at = unixepoch()"
+);
+function indexSingleDoc(relPath: string, content: string) {
+  const title = extractTitle(content, relPath);
+  const hash = hashContent(content);
+  upsertDoc.run(relPath, title, hash);
+}
+
+// ---------------------------------------------------------------------------
+// Cached Anthropic client (recreated only when API key changes)
+// ---------------------------------------------------------------------------
+let cachedAnthropic: { key: string; client: ReturnType<typeof createAnthropic> } | null = null;
+function getAnthropicClient(apiKey: string) {
+  if (!cachedAnthropic || cachedAnthropic.key !== apiKey) {
+    cachedAnthropic = { key: apiKey, client: createAnthropic({ apiKey }) };
+  }
+  return cachedAnthropic.client;
+}
+
+// ---------------------------------------------------------------------------
+// Agent tools (defined once at module scope)
+// ---------------------------------------------------------------------------
+const agentTools = {
+  read_file: tool({
+    description: "Read the contents of a file at the given path.",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: { path: { type: "string", description: "Absolute path to the file to read" } },
+      required: ["path"],
+    }),
+    execute: async ({ path }: { path: string }) => readFileFromDisk(path),
+  }),
+  write_file: tool({
+    description: "Write content to a file. Creates the file and any parent directories if they don't exist.",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Absolute path to the file to write" },
+        content: { type: "string", description: "The content to write to the file" },
+      },
+      required: ["path", "content"],
+    }),
+    execute: async ({ path, content }: { path: string; content: string }) => writeFileToDisk(path, content),
+  }),
+  edit_file: tool({
+    description: "Find and replace text in a file. The old_text must match exactly.",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Absolute path to the file to edit" },
+        old_text: { type: "string", description: "The exact text to find and replace" },
+        new_text: { type: "string", description: "The text to replace it with" },
+      },
+      required: ["path", "old_text", "new_text"],
+    }),
+    execute: async ({ path, old_text, new_text }: { path: string; old_text: string; new_text: string }) => editFileOnDisk(path, old_text, new_text),
+  }),
+  bash: tool({
+    description: "Execute a bash command on the user's machine. Use for file operations, system info, package management, running scripts, etc.",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: { command: { type: "string", description: "The bash command to execute" } },
+      required: ["command"],
+    }),
+    execute: async ({ command }: { command: string }) => executeBash(command),
+  }),
+  documents: tool({
+    description: "Access your knowledge base documents. Actions: 'list' (all docs), 'search' (find by query), 'read' (get content by path).",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["list", "search", "read"], description: "Action to perform" },
+        query: { type: "string", description: "Search query (for 'search' action)" },
+        path: { type: "string", description: "Document path (for 'read' action)" },
+      },
+      required: ["action"],
+    }),
+    execute: async ({ action, query, path }: { action: string; query?: string; path?: string }) => {
+      if (action === "list") {
+        const docs = stmts.listDocuments.all() as Document[];
+        if (!docs.length) return "No documents in your knowledge base. Add files to your docs folder.";
+        return docs.map(d => `${d.title || d.path} (${d.path})`).join("\n");
+      }
+      if (action === "search") {
+        if (!query) return "Error: query is required for search action";
+        try {
+          const results = stmts.searchDocuments.all(ftsQuery(query)) as Document[];
+          if (!results.length) return `No documents matching "${query}"`;
+          return results.map(d => `${d.title || d.path} (${d.path})`).join("\n");
+        } catch { return `No documents matching "${query}"`; }
+      }
+      if (action === "read") {
+        if (!path) return "Error: path is required for read action";
+        const docContent = readDocument(docsDir, path);
+        if (!docContent) return `Document not found: ${path}`;
+        if (docContent.length > 5000) {
+          return docContent.slice(0, 5000) + `\n\n... (${docContent.length - 5000} more characters. Use read_file with the full path to read more.)`;
+        }
+        return docContent;
+      }
+      return "Error: action must be 'list', 'search', or 'read'";
+    },
+  }),
+  remember: tool({
+    description: "Save a memory (key-value pair). Use to store important facts, preferences, or context. Empty value deletes the memory.",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        key: { type: "string", description: "Memory key (short, descriptive)" },
+        value: { type: "string", description: "Memory value. Empty string to delete." },
+      },
+      required: ["key", "value"],
+    }),
+    execute: async ({ key, value }: { key: string; value: string }) => {
+      if (!value || value.trim() === "") {
+        stmts.deleteMemory.run(key);
+        return `Memory deleted: "${key}"`;
+      }
+      const existing = stmts.getMemory.get(key) as { key: string; value: string } | null;
+      stmts.setMemory.run(key, value);
+      if (existing) {
+        return `Updated "${key}" (previous: "${existing.value}")`;
+      }
+      return `Remembered: "${key}" = "${value}"`;
+    },
+  }),
+  recall: tool({
+    description: "Search your memories by query. Returns matching memories ranked by relevance.",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query to find relevant memories" },
+      },
+      required: ["query"],
+    }),
+    execute: async ({ query }: { query: string }) => {
+      try {
+        const results = stmts.searchMemories.all(ftsQuery(query)) as Memory[];
+        if (!results.length) {
+          const all = stmts.listMemories.all() as Memory[];
+          if (!all.length) return "No memories stored yet.";
+          return "No exact matches. All memories:\n" + all.slice(0, 20).map(m => `${m.key}: ${m.value}`).join("\n");
+        }
+        return results.map(m => `${m.key}: ${m.value}`).join("\n");
+      } catch {
+        return "Memory search failed. Try a different query.";
+      }
+    },
+  }),
+  create_doc: tool({
+    description: "Create a new document in your knowledge base (docs folder).",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Relative path within docs folder (e.g., 'notes/meeting.md')" },
+        content: { type: "string", description: "Document content (markdown recommended)" },
+      },
+      required: ["path", "content"],
+    }),
+    execute: async ({ path: docPath, content }: { path: string; content: string }) => {
+      const fullPath = resolveDocPath(docPath);
+      if (!fullPath) return "Error: path must be within docs folder";
+      if (existsSync(fullPath)) return `Error: document already exists at ${docPath}. Use edit_doc to modify it.`;
+      const dir = dirname(fullPath);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      writeFileSync(fullPath, content, "utf-8");
+      indexSingleDoc(docPath, content);
+      return `Created document: ${docPath}`;
+    },
+  }),
+  edit_doc: tool({
+    description: "Edit a document in your knowledge base using find-and-replace.",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        path: { type: "string", description: "Relative path within docs folder" },
+        old_text: { type: "string", description: "Exact text to find" },
+        new_text: { type: "string", description: "Replacement text" },
+      },
+      required: ["path", "old_text", "new_text"],
+    }),
+    execute: async ({ path: docPath, old_text, new_text }: { path: string; old_text: string; new_text: string }) => {
+      const fullPath = resolveDocPath(docPath);
+      if (!fullPath) return "Error: path must be within docs folder";
+      if (!existsSync(fullPath)) return `Error: document not found: ${docPath}`;
+      const content = readFileSync(fullPath, "utf-8");
+      if (!content.includes(old_text)) return `Error: could not find the specified text in ${docPath}`;
+      const updated = content.replace(old_text, new_text);
+      writeFileSync(fullPath, updated, "utf-8");
+      indexSingleDoc(docPath, updated);
+      return `Edited document: ${docPath}`;
+    },
+  }),
+  conversations: tool({
+    description: "Search your past conversations or load messages from a specific conversation. Actions: 'search' (find by title query), 'load' (get messages by conversation ID).",
+    parameters: jsonSchema({
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["search", "load"], description: "Action to perform" },
+        query: { type: "string", description: "Search query for conversation titles (for 'search' action)" },
+        conversation_id: { type: "string", description: "Conversation ID to load messages from (for 'load' action)" },
+        limit: { type: "number", description: "Max results to return (default 10)" },
+      },
+      required: ["action"],
+    }),
+    execute: async ({ action, query, conversation_id, limit }: { action: string; query?: string; conversation_id?: string; limit?: number }) => {
+      const maxResults = limit || 10;
+      if (action === "search") {
+        if (!query) return "Error: query is required for search action";
+        try {
+          const results = stmts.searchConversations.all(ftsQuery(query)) as Conversation[];
+          if (!results.length) return `No conversations matching "${query}"`;
+          return results.slice(0, maxResults).map(c =>
+            `[${c.id}] ${c.title || "(untitled)"} — ${c.message_count} messages, last active ${new Date(c.updated_at * 1000).toLocaleDateString()}`
+          ).join("\n");
+        } catch { return `No conversations matching "${query}"`; }
+      }
+      if (action === "load") {
+        if (!conversation_id) return "Error: conversation_id is required for load action";
+        const messages = stmts.getMessages.all(conversation_id) as ChatMessage[];
+        if (!messages.length) return `No messages found in conversation ${conversation_id}`;
+        const limited = messages.slice(-maxResults);
+        const prefix = messages.length > maxResults ? `(showing last ${maxResults} of ${messages.length} messages)\n\n` : "";
+        return prefix + limited.map(m => `[${m.role}]: ${m.content}`).join("\n\n");
+      }
+      return "Error: action must be 'search' or 'load'";
+    },
+  }),
+};
 
 // ---------------------------------------------------------------------------
 // Relay manager (initialized lazily on first connect)
@@ -314,9 +564,7 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         return { success: true };
       },
       searchConversations: ({ query }) => {
-        // Append * for prefix matching in FTS5
-        const ftsQuery = query.trim().replace(/"/g, '""');
-        return stmts.searchConversations.all(`"${ftsQuery}"*`) as Conversation[];
+        return stmts.searchConversations.all(ftsQuery(query)) as Conversation[];
       },
 
       // Messages
@@ -324,8 +572,8 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         return stmts.getMessages.all(conversationId) as ChatMessage[];
       },
 
-      // Chat — AI SDK generateText (issue #4)
-      sendMessage: async ({ conversationId, content }) => {
+      // Chat — AI SDK streamText with RPC push (issues #4, #5, #6)
+      sendMessage: ({ conversationId, content }) => {
         const msgId = crypto.randomUUID();
         stmts.insertMessage.run(msgId, conversationId, "user", content);
         stmts.updateMessageCount.run(conversationId, conversationId);
@@ -341,6 +589,7 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
             "Please add your Anthropic API key in Settings to start chatting."
           );
           stmts.updateMessageCount.run(conversationId, conversationId);
+          rpc.send.streamDone({ conversationId, messageId: replyId });
           return { messageId: msgId };
         }
 
@@ -350,82 +599,70 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
           .filter((m) => m.role === "user" || m.role === "assistant")
           .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-        // Load character (system prompt)
+        // Build system prompt from character, username, documents, and memories
         const characterRow = stmts.getConfig.get("character") as { value: string } | null;
-        const systemPrompt = characterRow?.value || "You are a helpful AI assistant.";
+        const usernameRow = stmts.getConfig.get("username") as { value: string } | null;
+        const allDocuments = stmts.listDocuments.all() as Document[];
+        const allMemories = stmts.listMemories.all() as Memory[];
+        const systemPrompt = buildSystemPrompt({
+          username: usernameRow?.value ?? null,
+          character: characterRow?.value ?? null,
+          documents: allDocuments,
+          memories: allMemories,
+        });
 
-        // Generate response
-        try {
-          const anthropic = createAnthropic({ apiKey: apiKeyRow.value });
-          const { text } = await generateText({
-            model: anthropic("claude-sonnet-4-6-20250514"),
-            system: systemPrompt,
-            messages: aiMessages,
-            maxOutputTokens: 4096,
-            maxSteps: 5,
-            tools: {
-              read_file: tool({
-                description: "Read the contents of a file at the given path.",
-                parameters: jsonSchema({
-                  type: "object" as const,
-                  properties: { path: { type: "string", description: "Absolute path to the file to read" } },
-                  required: ["path"],
-                }),
-                execute: async ({ path }: { path: string }) => readFileFromDisk(path),
-              }),
-              write_file: tool({
-                description: "Write content to a file. Creates the file and any parent directories if they don't exist.",
-                parameters: jsonSchema({
-                  type: "object" as const,
-                  properties: {
-                    path: { type: "string", description: "Absolute path to the file to write" },
-                    content: { type: "string", description: "The content to write to the file" },
-                  },
-                  required: ["path", "content"],
-                }),
-                execute: async ({ path, content }: { path: string; content: string }) => writeFileToDisk(path, content),
-              }),
-              edit_file: tool({
-                description: "Find and replace text in a file. The old_text must match exactly.",
-                parameters: jsonSchema({
-                  type: "object" as const,
-                  properties: {
-                    path: { type: "string", description: "Absolute path to the file to edit" },
-                    old_text: { type: "string", description: "The exact text to find and replace" },
-                    new_text: { type: "string", description: "The text to replace it with" },
-                  },
-                  required: ["path", "old_text", "new_text"],
-                }),
-                execute: async ({ path, old_text, new_text }: { path: string; old_text: string; new_text: string }) => editFileOnDisk(path, old_text, new_text),
-              }),
-              bash: tool({
-                description: "Execute a bash command on the user's machine. Use for file operations, system info, package management, running scripts, etc.",
-                parameters: jsonSchema({
-                  type: "object" as const,
-                  properties: { command: { type: "string", description: "The bash command to execute" } },
-                  required: ["command"],
-                }),
-                execute: async ({ command }: { command: string }) => executeBash(command),
-              }),
-            },
-          });
+        // Start streaming in background (don't block the RPC response)
+        (async () => {
+          try {
+            const anthropic = getAnthropicClient(apiKeyRow.value);
+            const result = streamText({
+              model: anthropic("claude-sonnet-4-6-20250514"),
+              system: systemPrompt,
+              messages: aiMessages,
+              maxOutputTokens: 4096,
+              stopWhen: stepCountIs(5),
+              providerOptions: {
+                anthropic: {
+                  contextManagement: {
+                    edits: [{
+                      type: "compact_20260112",
+                      trigger: { type: "input_tokens", value: 150_000 },
+                      instructions: "Preserve: key decisions, facts learned, documents read, tool outcomes, unresolved questions. Drop: verbose tool output, repetitive exchanges, greeting pleasantries."
+                    }]
+                  }
+                }
+              },
+              tools: agentTools,
+            });
 
-          const replyId = crypto.randomUUID();
-          stmts.insertMessage.run(replyId, conversationId, "assistant", text);
-          stmts.updateMessageCount.run(conversationId, conversationId);
+            // Stream text deltas to frontend
+            let fullText = "";
+            for await (const delta of result.textStream) {
+              fullText += delta;
+              rpc.send.streamToken({ conversationId, token: delta });
+            }
 
-          // Auto-title: use first user message as title for untitled conversations
-          const conv = stmts.getConversation.get(conversationId) as Conversation | null;
-          if (conv && !conv.title) {
-            const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
-            stmts.renameConversation.run(title, conversationId);
+            // Save completed message
+            const replyId = crypto.randomUUID();
+            stmts.insertMessage.run(replyId, conversationId, "assistant", fullText);
+            stmts.updateMessageCount.run(conversationId, conversationId);
+
+            // Auto-title: use first user message as title for untitled conversations
+            const conv = stmts.getConversation.get(conversationId) as Conversation | null;
+            if (conv && !conv.title) {
+              const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+              stmts.renameConversation.run(title, conversationId);
+            }
+
+            rpc.send.streamDone({ conversationId, messageId: replyId });
+          } catch (err: any) {
+            const replyId = crypto.randomUUID();
+            const errorMsg = `Error: ${err.message || "Failed to generate response"}`;
+            stmts.insertMessage.run(replyId, conversationId, "assistant", errorMsg);
+            stmts.updateMessageCount.run(conversationId, conversationId);
+            rpc.send.streamError({ conversationId, error: errorMsg });
           }
-        } catch (err: any) {
-          const replyId = crypto.randomUUID();
-          const errorMsg = `Error: ${err.message || "Failed to generate response"}`;
-          stmts.insertMessage.run(replyId, conversationId, "assistant", errorMsg);
-          stmts.updateMessageCount.run(conversationId, conversationId);
-        }
+        })().catch((e) => console.error("Unhandled streaming error:", e));
 
         return { messageId: msgId };
       },
@@ -464,9 +701,8 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         return { success: true };
       },
       searchMemories: ({ query }) => {
-        const ftsQuery = query.trim().replace(/"/g, '""');
         try {
-          return stmts.searchMemories.all(`"${ftsQuery}"*`) as Memory[];
+          return stmts.searchMemories.all(ftsQuery(query)) as Memory[];
         } catch {
           return [];
         }
@@ -480,9 +716,8 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         return readDocument(docsDir, path);
       },
       searchDocuments: ({ query }) => {
-        const ftsQuery = query.trim().replace(/"/g, '""');
         try {
-          return stmts.searchDocuments.all(`"${ftsQuery}"*`) as Document[];
+          return stmts.searchDocuments.all(ftsQuery(query)) as Document[];
         } catch {
           return [];
         }

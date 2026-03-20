@@ -96,7 +96,10 @@ export function Settings() {
 
       {/* API Key */}
       <section className="mb-8 glass-card p-5">
-        <h2 className="text-base font-display mb-3">Anthropic API Key</h2>
+        <h2 className="text-base font-display mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--ghost-amber)] opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" /></svg>
+          Anthropic API Key
+        </h2>
         <p className="text-sm text-[var(--ghost-muted)] mb-4">
           Your API key is stored locally and never leaves your machine. Get one
           at{" "}
@@ -105,7 +108,7 @@ export function Settings() {
 
         {hasKey ? (
           <div className="flex items-center gap-3">
-            <div className="glass-card flex-1 px-4 py-2 text-sm text-[var(--ghost-muted)] font-mono">
+            <div className="glass-card flex-1 px-4 py-2 text-sm text-[var(--ghost-muted)] font-mono" style={{ letterSpacing: '0.1em' }}>
               sk-ant-...****
             </div>
             <button
@@ -140,7 +143,10 @@ export function Settings() {
 
       {/* Nostr Identity */}
       <section className="mb-8 glass-card p-5">
-        <h2 className="text-base font-display mb-3">Nostr Identity</h2>
+        <h2 className="text-base font-display mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--ghost-amber)] opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 10V4" /><path d="M7.5 7.5C7.5 5 9.5 3 12 3s4.5 2 4.5 4.5" /><rect x="5" y="10" width="14" height="11" rx="2" /><circle cx="12" cy="16" r="1" /></svg>
+          Nostr Identity
+        </h2>
         <p className="text-sm text-[var(--ghost-muted)] mb-4">
           Your ghost's identity on the Nostr network. Used for P2P communication with other ghosts.
         </p>
@@ -211,7 +217,10 @@ export function Settings() {
 
       {/* Nostr Relays */}
       <section className="mb-8 glass-card p-5">
-        <h2 className="text-base font-display mb-3">Nostr Relays</h2>
+        <h2 className="text-base font-display mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--ghost-amber)] opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h6" /><path d="M22 12h-6" /><path d="M12 2v6" /><path d="M12 22v-6" /><circle cx="12" cy="12" r="4" /></svg>
+          Nostr Relays
+        </h2>
         <p className="text-sm text-[var(--ghost-muted)] mb-4">
           Relays are how your ghost communicates with other ghosts.
         </p>
@@ -240,19 +249,25 @@ export function Settings() {
             </button>
           )}
         </div>
-        <div className="glass-card p-3 text-xs text-[var(--ghost-muted)] space-y-1">
-          <p>Default relays:</p>
-          <ul className="list-disc list-inside opacity-70">
-            <li>wss://relay.damus.io</li>
-            <li>wss://relay.nostr.band</li>
-            <li>wss://nos.lol</li>
-          </ul>
+        <div className="glass-card p-3 text-xs text-[var(--ghost-muted)] space-y-2">
+          <p className="mb-1">Default relays:</p>
+          {["wss://relay.damus.io", "wss://relay.nostr.band", "wss://nos.lol"].map((relay) => (
+            <div key={relay} className="flex items-center gap-2">
+              <div
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${relayStatus.connected > 0 ? "bg-green-500" : "bg-[var(--ghost-muted)] opacity-40"}`}
+              />
+              <span className="font-mono">{relay}</span>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* Model */}
       <section className="mb-8 glass-card p-5">
-        <h2 className="text-base font-display mb-3">Model</h2>
+        <h2 className="text-base font-display mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--ghost-amber)] opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="9" y="9" width="6" height="6" /><path d="M9 1v3" /><path d="M15 1v3" /><path d="M9 20v3" /><path d="M15 20v3" /><path d="M20 9h3" /><path d="M20 14h3" /><path d="M1 9h3" /><path d="M1 14h3" /></svg>
+          Model
+        </h2>
         <div className="glass-card px-4 py-3 text-sm">
           <span>Claude Sonnet 4.6</span>
           <span className="text-[var(--ghost-muted)] ml-2">
@@ -263,7 +278,10 @@ export function Settings() {
 
       {/* About & Updates */}
       <section className="glass-card p-5">
-        <h2 className="text-base font-display mb-3">About</h2>
+        <h2 className="text-base font-display mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--ghost-amber)] opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" /></svg>
+          About
+        </h2>
         <div className="text-sm text-[var(--ghost-muted)] space-y-3">
           <div className="flex items-center gap-3">
             <span className="text-amber-glow">Ghost v{appVersion}</span>

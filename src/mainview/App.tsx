@@ -48,44 +48,26 @@ function App() {
         <div className="ambient-blob ambient-blob-3" />
       </div>
 
-      <nav className="w-[56px] flex flex-col items-center py-4 gap-1.5 sidebar-border relative z-10">
-        <NavButton
-          label="Chat"
-          icon={<IconChat />}
-          active={page === "chat"}
-          onClick={() => setPage("chat")}
-        />
-        <NavButton
-          label="Documents"
-          icon={<IconDocs />}
-          active={page === "documents"}
-          onClick={() => setPage("documents")}
-        />
-        <NavButton
-          label="Train"
-          icon={<IconTrain />}
-          active={page === "train"}
-          onClick={() => setPage("train")}
-        />
-        <NavButton
-          label="Memories"
-          icon={<IconMemories />}
-          active={page === "memories"}
-          onClick={() => setPage("memories")}
-        />
-        <NavButton
-          label="Peers"
-          icon={<IconPeers />}
-          active={page === "peers"}
-          onClick={() => setPage("peers")}
-        />
+      <nav className="ghost-nav">
+        {/* Ghost sigil at top */}
+        <div className="ghost-sigil">
+          <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5">
+            <circle cx="12" cy="10" r="5" stroke="currentColor" strokeWidth="1.2" opacity="0.6" />
+            <path d="M12 15 C12 15, 8 19, 8 21 C8 21, 12 20, 12 20 C12 20, 16 21, 16 21 C16 19, 12 15, 12 15Z" fill="currentColor" opacity="0.3" />
+            <circle cx="12" cy="10" r="1.5" fill="currentColor" opacity="0.5" />
+          </svg>
+        </div>
+
+        <div className="nav-group">
+          <NavButton label="Chat" icon={<IconChat />} active={page === "chat"} onClick={() => setPage("chat")} />
+          <NavButton label="Documents" icon={<IconDocs />} active={page === "documents"} onClick={() => setPage("documents")} />
+          <NavButton label="Character" icon={<IconTrain />} active={page === "train"} onClick={() => setPage("train")} />
+          <NavButton label="Memories" icon={<IconMemories />} active={page === "memories"} onClick={() => setPage("memories")} />
+          <NavButton label="Peers" icon={<IconPeers />} active={page === "peers"} onClick={() => setPage("peers")} />
+        </div>
+
         <div className="flex-1" />
-        <NavButton
-          label="Settings"
-          icon={<IconSettings />}
-          active={page === "settings"}
-          onClick={() => setPage("settings")}
-        />
+        <NavButton label="Settings" icon={<IconSettings />} active={page === "settings"} onClick={() => setPage("settings")} />
       </nav>
 
       <main className="flex-1 flex flex-col overflow-hidden relative z-10">
@@ -109,61 +91,107 @@ function NavButton({ label, icon, active, onClick }: {
   return (
     <button
       onClick={onClick}
-      title={label}
-      className={`nav-item ${active ? "nav-item-active" : ""}`}
+      className={`nav-item group ${active ? "nav-item-active" : ""}`}
     >
-      {icon}
+      <span className="nav-icon">{icon}</span>
+      <span className="nav-tooltip">{label}</span>
     </button>
   );
 }
 
-/* ─── Icons (Heroicons Outline, 20x20) ─── */
+/* ─── Bespoke Ghost Icons ─── */
+/* Custom-drawn SVGs with spectral aesthetic: thin strokes, */
+/* organic curves, ethereal details. 20x20 viewBox. */
 
 function IconChat() {
   return (
-    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+    <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="none">
+      {/* Speech bubble with spectral wisps */}
+      <path
+        d="M4 4.5C4 3.67 4.67 3 5.5 3h9C15.33 3 16 3.67 16 4.5v7c0 .83-.67 1.5-1.5 1.5H8l-3 3v-3H5.5C4.67 13 4 12.33 4 11.5v-7Z"
+        stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"
+      />
+      {/* Ethereal dots — thinking / presence */}
+      <circle cx="7.5" cy="8" r="0.8" fill="currentColor" opacity="0.7" />
+      <circle cx="10" cy="8" r="0.8" fill="currentColor" opacity="0.5" />
+      <circle cx="12.5" cy="8" r="0.8" fill="currentColor" opacity="0.3" />
     </svg>
   );
 }
 
 function IconDocs() {
   return (
-    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+    <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="none">
+      {/* Layered pages — knowledge stack */}
+      <rect x="6" y="2" width="10" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.1" opacity="0.3" />
+      <rect x="4" y="4" width="10" height="13" rx="1.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
+      {/* Text lines */}
+      <line x1="6.5" y1="8" x2="11.5" y2="8" stroke="currentColor" strokeWidth="1" opacity="0.5" strokeLinecap="round" />
+      <line x1="6.5" y1="10.5" x2="10" y2="10.5" stroke="currentColor" strokeWidth="1" opacity="0.35" strokeLinecap="round" />
+      <line x1="6.5" y1="13" x2="12" y2="13" stroke="currentColor" strokeWidth="1" opacity="0.2" strokeLinecap="round" />
     </svg>
   );
 }
 
 function IconTrain() {
   return (
-    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+    <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="none">
+      {/* Ghost silhouette — the character/soul being shaped */}
+      <path
+        d="M10 3C7.24 3 5 5.24 5 8v4c0 .5.2 1 .5 1.2l.5.3v1.5c0 .55.45 1 1 1s1-.2 1-.5v-1h4v1c0 .3.45.5 1 .5s1-.45 1-1v-1.5l.5-.3c.3-.2.5-.7.5-1.2V8c0-2.76-2.24-5-5-5Z"
+        stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"
+      />
+      {/* Eyes — personality indicators */}
+      <circle cx="8" cy="8.5" r="1" fill="currentColor" opacity="0.6" />
+      <circle cx="12" cy="8.5" r="1" fill="currentColor" opacity="0.6" />
     </svg>
   );
 }
 
 function IconMemories() {
   return (
-    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+    <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="none">
+      {/* Crystal/gem — preserved memories */}
+      <path
+        d="M10 2L5 7l5 11 5-11-5-5Z"
+        stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"
+      />
+      {/* Facet lines */}
+      <path d="M5 7h10" stroke="currentColor" strokeWidth="0.8" opacity="0.4" />
+      <path d="M7 7l3 11" stroke="currentColor" strokeWidth="0.6" opacity="0.25" />
+      <path d="M13 7l-3 11" stroke="currentColor" strokeWidth="0.6" opacity="0.25" />
+      {/* Sparkle */}
+      <circle cx="10" cy="5" r="0.6" fill="currentColor" opacity="0.5" />
     </svg>
   );
 }
 
 function IconPeers() {
   return (
-    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+    <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="none">
+      {/* Two overlapping circles — connection/bonding */}
+      <circle cx="7.5" cy="9" r="4" stroke="currentColor" strokeWidth="1.1" opacity="0.6" />
+      <circle cx="12.5" cy="9" r="4" stroke="currentColor" strokeWidth="1.1" opacity="0.6" />
+      {/* Connection point in overlap */}
+      <circle cx="10" cy="9" r="1" fill="currentColor" opacity="0.4" />
+      {/* Signal arcs */}
+      <path d="M10 4.5c1.5 0 2.5.5 3 1.5" stroke="currentColor" strokeWidth="0.7" opacity="0.3" strokeLinecap="round" />
+      <path d="M10 13.5c-1.5 0-2.5-.5-3-1.5" stroke="currentColor" strokeWidth="0.7" opacity="0.3" strokeLinecap="round" />
     </svg>
   );
 }
 
 function IconSettings() {
   return (
-    <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <svg className="w-[18px] h-[18px]" viewBox="0 0 20 20" fill="none">
+      {/* Minimal tuning sliders — three horizontal lines with dots */}
+      <line x1="4" y1="6" x2="16" y2="6" stroke="currentColor" strokeWidth="1" opacity="0.3" strokeLinecap="round" />
+      <line x1="4" y1="10" x2="16" y2="10" stroke="currentColor" strokeWidth="1" opacity="0.3" strokeLinecap="round" />
+      <line x1="4" y1="14" x2="16" y2="14" stroke="currentColor" strokeWidth="1" opacity="0.3" strokeLinecap="round" />
+      {/* Slider handles */}
+      <circle cx="8" cy="6" r="1.5" fill="currentColor" opacity="0.7" />
+      <circle cx="13" cy="10" r="1.5" fill="currentColor" opacity="0.7" />
+      <circle cx="6.5" cy="14" r="1.5" fill="currentColor" opacity="0.7" />
     </svg>
   );
 }
