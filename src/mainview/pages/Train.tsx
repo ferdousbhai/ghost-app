@@ -18,8 +18,8 @@ export function Train() {
   const [sections, setSections] = useState<Section[]>([]);
   const [lastCompletedIdx, setLastCompletedIdx] = useState<number | null>(null);
   const prevCompletedRef = useRef<Set<string>>(new Set());
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Load character on mount
   useEffect(() => {

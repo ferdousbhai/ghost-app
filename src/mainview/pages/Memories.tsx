@@ -9,6 +9,7 @@ function KeyIcon() {
 }
 
 export function Memories() {
+  const [allMemories, setAllMemories] = useState<Memory[]>([]);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [newKey, setNewKey] = useState("");
@@ -22,16 +23,23 @@ export function Memories() {
 
   async function loadMemories() {
     const mems = await rpc.request.listMemories({});
+    setAllMemories(mems);
     setMemories(mems);
   }
 
-  async function handleSearch() {
+  function handleSearch() {
     if (!searchQuery.trim()) {
-      loadMemories();
+      setMemories(allMemories);
       return;
     }
-    const results = await rpc.request.searchMemories({ query: searchQuery });
-    setMemories(results);
+    const q = searchQuery.toLowerCase();
+    setMemories(
+      allMemories.filter(
+        (m) =>
+          m.key.toLowerCase().includes(q) ||
+          m.value.toLowerCase().includes(q)
+      )
+    );
   }
 
   async function handleAdd() {
@@ -187,9 +195,6 @@ export function Memories() {
                   </div>
                   <div className="text-sm text-[var(--ghost-muted)] mt-0.5 whitespace-pre-wrap">
                     {mem.value}
-                  </div>
-                  <div className="text-xs opacity-40 mt-1">
-                    {new Date(mem.updated_at * 1000).toLocaleDateString()}
                   </div>
                 </div>
                 <div className="hidden group-hover:flex gap-1 shrink-0">

@@ -10,7 +10,7 @@ import type { GhostRPC } from "../shared/rpc";
 // Stream event emitter — lets React components subscribe to streaming updates
 // ---------------------------------------------------------------------------
 type StreamTokenEvent = { conversationId: string; token: string };
-type StreamDoneEvent = { conversationId: string; messageId: string };
+type StreamDoneEvent = { conversationId: string };
 type StreamErrorEvent = { conversationId: string; error: string };
 
 type StreamEventMap = {

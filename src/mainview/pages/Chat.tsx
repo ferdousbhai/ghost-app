@@ -108,26 +108,20 @@ export function Chat() {
       }
     });
 
+    function handleStreamEnd(conversationId: string) {
+      setIsStreaming(false);
+      setStreamingText("");
+      setLoading(false);
+      rpc.request.getMessages({ conversationId }).then(setMessages);
+      rpc.request.listConversations({}).then(setConversations);
+    }
+
     const unsubDone = streamEvents.on("streamDone", ({ conversationId }) => {
-      if (conversationId === activeIdRef.current) {
-        setIsStreaming(false);
-        setStreamingText("");
-        setLoading(false);
-        // Refresh messages and conversation list from DB
-        rpc.request.getMessages({ conversationId }).then(setMessages);
-        rpc.request.listConversations({}).then(setConversations);
-      }
+      if (conversationId === activeIdRef.current) handleStreamEnd(conversationId);
     });
 
     const unsubError = streamEvents.on("streamError", ({ conversationId }) => {
-      if (conversationId === activeIdRef.current) {
-        setIsStreaming(false);
-        setStreamingText("");
-        setLoading(false);
-        // Refresh messages from DB (error message was saved server-side)
-        rpc.request.getMessages({ conversationId }).then(setMessages);
-        rpc.request.listConversations({}).then(setConversations);
-      }
+      if (conversationId === activeIdRef.current) handleStreamEnd(conversationId);
     });
 
     return () => {
@@ -142,16 +136,19 @@ export function Chat() {
     rpc.request.listConversations({}).then(setConversations);
   }, []);
 
-  // Search conversations when debounced query changes
+  // Filter conversations client-side when search query changes
   useEffect(() => {
     if (debouncedSearch.trim()) {
-      rpc.request
-        .searchConversations({ query: debouncedSearch })
-        .then(setSearchResults);
+      const q = debouncedSearch.toLowerCase();
+      setSearchResults(
+        conversations.filter((c) =>
+          c.title?.toLowerCase().includes(q)
+        )
+      );
     } else {
       setSearchResults(null);
     }
-  }, [debouncedSearch]);
+  }, [debouncedSearch, conversations]);
 
   // Load messages when conversation changes
   useEffect(() => {
@@ -179,10 +176,9 @@ export function Chat() {
   }, [renamingId]);
 
   async function newConversation() {
-    const id = crypto.randomUUID();
-    const conv = await rpc.request.createConversation({ id });
+    const conv = await rpc.request.createConversation({});
     setConversations((prev) => [conv, ...prev]);
-    setActiveId(id);
+    setActiveId(conv.id);
   }
 
   async function handleSend() {
@@ -190,11 +186,8 @@ export function Chat() {
 
     let conversationId = activeId;
     if (!conversationId) {
-      conversationId = crypto.randomUUID();
-      const conv = await rpc.request.createConversation({
-        id: conversationId,
-        title: input.slice(0, 50),
-      });
+      const conv = await rpc.request.createConversation({});
+      conversationId = conv.id;
       setConversations((prev) => [conv, ...prev]);
       setActiveId(conversationId);
     }
@@ -210,7 +203,6 @@ export function Chat() {
       conversation_id: conversationId,
       role: "user",
       content,
-      created_at: Math.floor(Date.now() / 1000),
     };
     setMessages((prev) => [...prev, optimisticMsg]);
 

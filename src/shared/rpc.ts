@@ -9,37 +9,24 @@
  * Each side wraps it with their own API (BrowserView.defineRPC / Electroview.defineRPC).
  */
 
-/** A single chat message as stored in SQLite. */
+/** A single chat message for display in the UI. */
 export type ChatMessage = {
   id: string;
   conversation_id: string;
-  role: "user" | "assistant" | "system" | "tool";
+  role: "user" | "assistant";
   content: string;
-  created_at: number;
 };
 
 /** A memory key-value pair. */
 export type Memory = {
   key: string;
   value: string;
-  updated_at: number;
 };
 
-/** An indexed document from the local docs folder. */
+/** A document in the local docs folder. */
 export type Document = {
   path: string;
   title: string | null;
-  content_hash: string;
-  indexed_at: number;
-};
-
-/** A tool call requiring user approval. */
-export type ToolCall = {
-  id: string;
-  name: string;
-  args: Record<string, unknown>;
-  status: "pending" | "approved" | "denied" | "completed";
-  result?: string;
 };
 
 /** A peer on the Nostr network. */
@@ -57,9 +44,7 @@ export type Conversation = {
   id: string;
   title: string | null;
   peer_npub: string | null;
-  is_incoming: number;
   message_count: number;
-  created_at: number;
   updated_at: number;
 };
 
@@ -73,14 +58,14 @@ export type GhostRPC = {
         response: { success: boolean };
       };
 
-      // Conversations
+      // Conversations (backed by Agent SDK sessions)
       listConversations: { params: {}; response: Conversation[] };
       getConversation: {
         params: { id: string };
         response: Conversation | null;
       };
       createConversation: {
-        params: { id: string; title?: string };
+        params: { id?: string };
         response: Conversation;
       };
       deleteConversation: {
@@ -91,21 +76,23 @@ export type GhostRPC = {
         params: { id: string; title: string };
         response: { success: boolean };
       };
-      searchConversations: {
-        params: { query: string };
-        response: Conversation[];
-      };
 
-      // Messages
+      // Messages (read from Agent SDK session files)
       getMessages: {
         params: { conversationId: string };
         response: ChatMessage[];
       };
 
-      // Chat (send a user message, triggers AI streaming)
+      // Chat (send a user message, triggers Agent SDK streaming)
       sendMessage: {
         params: { conversationId: string; content: string };
-        response: { messageId: string };
+        response: { success: boolean };
+      };
+
+      // Stop streaming
+      stopStreaming: {
+        params: { conversationId: string };
+        response: { success: boolean };
       };
 
       // Character
@@ -116,26 +103,18 @@ export type GhostRPC = {
       isOnboarded: { params: {}; response: boolean };
       completeOnboarding: { params: {}; response: { success: boolean } };
 
-      // Memories
+      // Memories (backed by memories.json)
       listMemories: { params: {}; response: Memory[] };
       setMemory: {
         params: { key: string; value: string };
-        response: { success: boolean; previousValue: string | null };
+        response: { success: boolean };
       };
       deleteMemory: { params: { key: string }; response: { success: boolean } };
-      searchMemories: { params: { query: string }; response: Memory[] };
 
-      // Documents
+      // Documents (backed by filesystem)
       listDocuments: { params: {}; response: Document[] };
       readDocument: { params: { path: string }; response: string | null };
-      searchDocuments: { params: { query: string }; response: Document[] };
       getDocsDir: { params: {}; response: string };
-      reindexDocuments: { params: {}; response: { indexed: number } };
-
-      // Tool approval
-      approveToolCall: { params: { callId: string }; response: { result: string } };
-      denyToolCall: { params: { callId: string }; response: { success: boolean } };
-      getPendingToolCalls: { params: { conversationId: string }; response: ToolCall[] };
 
       // Peers
       listPeers: { params: {}; response: Peer[] };
@@ -177,7 +156,7 @@ export type GhostRPC = {
     messages: {
       // Stream tokens from AI to the webview
       streamToken: { conversationId: string; token: string };
-      streamDone: { conversationId: string; messageId: string };
+      streamDone: { conversationId: string };
       streamError: { conversationId: string; error: string };
     };
   };

@@ -14,8 +14,7 @@
     "package": "vite build && electrobun build --env=stable"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.58",
-    "ai": "^6.0.116",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.81",
     "electrobun": "latest",
     "nostr-tools": "^2.23.3",
     "react": "^19.1.0",

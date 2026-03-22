@@ -15,6 +15,7 @@ function getExtDotColor(ext: string): string {
 }
 
 export function Documents() {
+  const [allDocuments, setAllDocuments] = useState<Document[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -29,16 +30,23 @@ export function Documents() {
 
   async function loadDocuments() {
     const docs = await rpc.request.listDocuments({});
+    setAllDocuments(docs);
     setDocuments(docs);
   }
 
-  async function handleSearch() {
+  function handleSearch() {
     if (!searchQuery.trim()) {
-      loadDocuments();
+      setDocuments(allDocuments);
       return;
     }
-    const results = await rpc.request.searchDocuments({ query: searchQuery });
-    setDocuments(results);
+    const q = searchQuery.toLowerCase();
+    setDocuments(
+      allDocuments.filter(
+        (d) =>
+          d.path.toLowerCase().includes(q) ||
+          d.title?.toLowerCase().includes(q)
+      )
+    );
   }
 
   async function selectDoc(path: string) {
@@ -48,10 +56,8 @@ export function Documents() {
     setContent(text);
   }
 
-  async function handleReindex() {
-    const result = await rpc.request.reindexDocuments({});
+  function handleRefresh() {
     loadDocuments();
-    alert(`Re-indexed ${result.indexed} documents`);
   }
 
   function handleCopy() {
@@ -132,7 +138,7 @@ export function Documents() {
             </div>
           </div>
           <button
-            onClick={handleReindex}
+            onClick={handleRefresh}
             className="w-full px-3 py-1 text-[10px] tracking-wider uppercase font-mono transition-all duration-200"
             style={{
               color: "oklch(1 0 0 / 0.3)",
@@ -151,7 +157,7 @@ export function Documents() {
               e.currentTarget.style.background = "oklch(1 0 0 / 0.02)";
             }}
           >
-            Re-index
+            Refresh
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">

@@ -1,15 +1,14 @@
 /**
  * System prompt builder for the ghost agent.
- * Pure function — no DB access; all data passed as arguments.
+ * Accepts pre-loaded character content to avoid redundant file reads.
  */
 
 export function buildSystemPrompt(options: {
   username: string | null;
   character: string | null;
-  documents: Array<{ path: string; title: string | null }>;
-  memories: Array<{ key: string; value: string }>;
+  ghostDir: string;
 }): string {
-  const { username, character, documents, memories } = options;
+  const { username, character, ghostDir } = options;
   const name = username || "your creator";
 
   const sections: string[] = [];
@@ -20,7 +19,7 @@ export function buildSystemPrompt(options: {
 You speak as ${name}, in first person. You ARE them in conversation.`
   );
 
-  // Behavior directives
+  // Behavior
   sections.push(
     `BE ${name}. Stay in character at all times.
 SILENT TOOL USE: Never narrate tool calls. Just use tools and incorporate results naturally.
@@ -36,31 +35,17 @@ Use multiple tools in parallel when possible.`
     );
   }
 
-  // Documents catalog (only if docs exist)
-  if (documents.length > 0) {
-    const docList = documents
-      .map((d) => `- ${d.title || "(untitled)"} (${d.path})`)
-      .join("\n");
-    sections.push(
-      `<documents>\nYou have ${documents.length} document${documents.length === 1 ? "" : "s"} in your knowledge base:\n${docList}\nUse the documents tool to read their full content when relevant.\n</documents>`
-    );
-  }
-
-  // Memories (only if memories exist)
-  if (memories.length > 0) {
-    const memList = memories.map((m) => `${m.key}: ${m.value}`).join("\n");
-    sections.push(`<memories>\n${memList}\n</memories>`);
-  }
-
-  // Available tools
+  // Working directory layout
   sections.push(
-    `<tools_overview>
-- documents: List, search, or read your documents
-- remember/recall: Save and retrieve memories about people and conversations
-- create_doc/edit_doc: Create or edit documents in your knowledge base
-- read_file/write_file/edit_file: Access the local filesystem
-- bash: Execute shell commands
-</tools_overview>`
+    `<working_directory>
+Your data lives in ${ghostDir}:
+- character.md — your personality (read-only during chat)
+- memories.json — your memories as {"key": "value"} pairs. Read and update this to remember things about people and conversations.
+- docs/ — your knowledge base documents. Use Glob + Read to browse and search.
+
+When you learn something important about someone or a conversation, update memories.json using the Edit or Write tool.
+When asked about your documents, use Glob("docs/**/*") then Read the relevant files.
+</working_directory>`
   );
 
   return sections.join("\n\n");
