@@ -158,6 +158,8 @@ export type GhostRPC = {
       streamToken: { conversationId: string; token: string };
       streamDone: { conversationId: string };
       streamError: { conversationId: string; error: string };
+      // Incoming DM notification
+      dmReceived: { conversationId: string; peerNpub: string; peerName: string | null };
     };
   };
 };

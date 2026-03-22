@@ -13,8 +13,8 @@ import {
 import type { GhostRPC, Conversation, Document, Peer } from "../shared/rpc";
 import { buildSystemPrompt } from "./prompt";
 import { RelayManager } from "./relay";
-import { generateKeypair as genKeypair, identityFromNsec, npubToHex } from "./nostr";
-import { createGiftWrap, unwrapGiftWrap } from "./encryption";
+import { generateKeypair as genKeypair, identityFromNsec, npubToHex, hexToNpub } from "./nostr";
+import { createGiftWrap, unwrapGiftWrap, type GiftWrapMessage } from "./encryption";
 
 const DEFAULT_CHARACTER_TEMPLATE = `# Character
 
@@ -112,6 +112,9 @@ db.exec(`
   );
 `);
 
+// Migration: add session_id column to peers (for DM conversations)
+try { db.exec("ALTER TABLE peers ADD COLUMN session_id TEXT"); } catch {}
+
 const stmts = {
   getConfig: db.prepare("SELECT value FROM config WHERE key = ?"),
   setConfig: db.prepare(
@@ -123,6 +126,9 @@ const stmts = {
   followPeer: db.prepare("UPDATE peers SET is_following = 1 WHERE npub = ?"),
   unfollowPeer: db.prepare("UPDATE peers SET is_following = 0 WHERE npub = ?"),
   getPeer: db.prepare("SELECT * FROM peers WHERE npub = ?"),
+  setPeerSessionId: db.prepare("UPDATE peers SET session_id = ? WHERE npub = ?"),
+  listPeerSessions: db.prepare("SELECT session_id, npub, username FROM peers WHERE session_id IS NOT NULL"),
+  updateLastMessageAt: db.prepare("UPDATE peers SET last_message_at = unixepoch() WHERE npub = ?"),
 };
 
 // ---------------------------------------------------------------------------
@@ -223,23 +229,214 @@ const activeQueries = new Map<string, AbortController>();
 const knownSessionIds = new Set<string>();
 
 // ---------------------------------------------------------------------------
+// Shared agent query helper
+// ---------------------------------------------------------------------------
+
+/** Run an Agent SDK query and stream tokens. Returns the final assistant text. */
+async function runAgentQuery(
+  prompt: string,
+  options: AgentOptions,
+  onToken: (token: string) => void,
+  onDone: () => void,
+): Promise<string> {
+  let responseText = "";
+  let streamedPartials = false;
+
+  for await (const msg of query({ prompt, options })) {
+    if (msg.type === "system" && "subtype" in msg && msg.subtype === "init") {
+      knownSessionIds.add(msg.session_id);
+    }
+
+    if (msg.type === "stream_event" && "event" in msg) {
+      const event = msg.event as Record<string, unknown>;
+      if (event.type === "content_block_delta") {
+        const delta = event.delta as Record<string, unknown>;
+        if (delta.type === "text_delta" && typeof delta.text === "string") {
+          streamedPartials = true;
+          onToken(delta.text);
+        }
+      }
+    }
+
+    if (msg.type === "assistant") {
+      const text = extractTextFromMessage(msg.message);
+      if (text) {
+        if (!streamedPartials) onToken(text);
+        responseText = text;
+      }
+      streamedPartials = false;
+    }
+  }
+
+  onDone();
+  return responseText;
+}
+
+/** Build common Agent SDK options for a session. */
+function buildAgentOptions(opts: {
+  apiKey: string;
+  systemPrompt: string;
+  sessionId: string;
+  tools?: string[];
+  permissionMode?: string;
+  maxTurns?: number;
+  abortController?: AbortController;
+}): AgentOptions {
+  const isExisting = knownSessionIds.has(opts.sessionId);
+  return {
+    model: "claude-sonnet-4-6-20250514",
+    cwd: ghostDir,
+    systemPrompt: opts.systemPrompt,
+    tools: opts.tools ?? ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+    allowedTools: opts.tools ?? ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
+    permissionMode: (opts.permissionMode ?? "acceptEdits") as "acceptEdits" | "dontAsk",
+    maxTurns: opts.maxTurns ?? 10,
+    abortController: opts.abortController,
+    includePartialMessages: true,
+    executable: "bun",
+    env: {
+      ...process.env,
+      ANTHROPIC_API_KEY: opts.apiKey,
+      CLAUDE_CONFIG_DIR: claudeConfigDir,
+    },
+    ...(isExisting ? { resume: opts.sessionId } : { sessionId: opts.sessionId }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Incoming DM handler
+// ---------------------------------------------------------------------------
+
+// Dedup: relays often deliver the same event multiple times
+const seenEventIds = new Set<string>();
+const MAX_SEEN_EVENTS = 1000;
+
+const dmQueue = new Map<string, Promise<void>>();
+let activeDmCount = 0;
+const MAX_CONCURRENT_DMS = 3;
+
+// rpc is initialized after this block — late-bound via rpcRef
+let rpcRef: { send: { streamToken: (d: { conversationId: string; token: string }) => void; streamDone: (d: { conversationId: string }) => void; dmReceived: (d: { conversationId: string; peerNpub: string; peerName: string | null }) => void } } | null = null;
+
+async function handleIncomingDM(
+  senderPubkeyHex: string,
+  message: GiftWrapMessage,
+  nsec: string,
+): Promise<void> {
+  const senderNpub = hexToNpub(senderPubkeyHex);
+
+  stmts.addPeer.run(senderNpub, null);
+
+  const peer = stmts.getPeer.get(senderNpub) as Peer & { session_id?: string; is_following: number } | null;
+  let sessionId = peer?.session_id;
+  if (!sessionId) {
+    sessionId = crypto.randomUUID();
+    stmts.setPeerSessionId.run(sessionId, senderNpub);
+  }
+
+  rpcRef?.send.dmReceived({
+    conversationId: sessionId,
+    peerNpub: senderNpub,
+    peerName: peer?.username ?? null,
+  });
+
+  // Auto-reply only for followed peers (prevents API credit abuse)
+  if (!peer?.is_following) {
+    console.log(`DM from ${senderNpub} (not followed) — stored but no auto-reply`);
+    return;
+  }
+
+  stmts.updateLastMessageAt.run(senderNpub);
+
+  const apiKeyRow = stmts.getConfig.get("api_key") as { value: string } | null;
+  if (!apiKeyRow?.value) return;
+
+  if (activeDmCount >= MAX_CONCURRENT_DMS) {
+    console.log(`DM from ${senderNpub} — skipped (${MAX_CONCURRENT_DMS} concurrent DM sessions active)`);
+    return;
+  }
+
+  activeDmCount++;
+  try {
+    const usernameRow = stmts.getConfig.get("username") as { value: string } | null;
+    const systemPrompt = buildSystemPrompt({
+      username: usernameRow?.value ?? null,
+      character: getCharacterContent(),
+      ghostDir,
+      peerContext: { peerName: peer?.username ?? null, peerNpub: senderNpub },
+    });
+
+    const options = buildAgentOptions({
+      apiKey: apiKeyRow.value,
+      systemPrompt,
+      sessionId,
+      tools: [],
+      permissionMode: "dontAsk",
+      maxTurns: 3,
+    });
+
+    const responseText = await runAgentQuery(
+      message.content,
+      options,
+      (token) => rpcRef?.send.streamToken({ conversationId: sessionId!, token }),
+      () => rpcRef?.send.streamDone({ conversationId: sessionId! }),
+    );
+
+    if (responseText.trim()) {
+      const event = createGiftWrap(nsec, senderPubkeyHex, {
+        type: "chat",
+        content: responseText,
+        conversationId: sessionId!,
+        timestamp: Math.floor(Date.now() / 1000),
+      });
+      const mgr = getRelayManager();
+      if (mgr.connectedCount > 0) {
+        await mgr.publish(event);
+      }
+    }
+  } finally {
+    activeDmCount--;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Relay manager (initialized lazily on first connect)
 // ---------------------------------------------------------------------------
 let relayManager: RelayManager | null = null;
 
 function getRelayManager(): RelayManager {
   if (!relayManager) {
-    relayManager = new RelayManager(undefined, (_event, _relay) => {
-      // Handle incoming gift-wrapped DMs
+    relayManager = new RelayManager(undefined, (event, _relay) => {
+      // Dedup: skip events we've already processed
+      if (seenEventIds.has(event.id)) return;
+      seenEventIds.add(event.id);
+      if (seenEventIds.size > MAX_SEEN_EVENTS) {
+        // Drop oldest 200 entries (Set iterates in insertion order)
+        const iter = seenEventIds.values();
+        for (let i = 0; i < 200; i++) {
+          const { value, done } = iter.next();
+          if (done) break;
+          seenEventIds.delete(value);
+        }
+      }
+
       const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;
       if (!nsecRow?.value) return;
 
-      const unwrapped = unwrapGiftWrap(nsecRow.value, _event);
+      const unwrapped = unwrapGiftWrap(nsecRow.value, event);
       if (!unwrapped) return;
 
-      console.log(
-        `Received DM from ${unwrapped.senderPubkey}: ${unwrapped.message.content.slice(0, 50)}...`
+      const { senderPubkey, message } = unwrapped;
+      const npub = hexToNpub(senderPubkey);
+
+      // Serialize DMs from the same peer
+      const prev = dmQueue.get(npub) ?? Promise.resolve();
+      const next = prev.then(() =>
+        handleIncomingDM(senderPubkey, message, nsecRow.value)
+          .catch((err) => console.error(`DM handler error for ${npub}:`, err))
       );
+      dmQueue.set(npub, next);
+      next.then(() => { if (dmQueue.get(npub) === next) dmQueue.delete(npub); });
     });
   }
   return relayManager;
@@ -268,9 +465,26 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
       listConversations: async () => {
         try {
           const sessions = await listSessions({ dir: ghostDir });
-          // Populate known sessions cache
           for (const s of sessions) knownSessionIds.add(s.sessionId);
-          return sessions.map(sessionToConversation);
+
+          // Enrich with peer data for DM conversations
+          const peerSessions = stmts.listPeerSessions.all() as Array<{
+            session_id: string; npub: string; username: string | null;
+          }>;
+          const peerMap = new Map(peerSessions.map((p) => [p.session_id, p]));
+
+          return sessions.map((s) => {
+            const peer = peerMap.get(s.sessionId);
+            return {
+              id: s.sessionId,
+              title: peer
+                ? (peer.username || `DM: ${peer.npub.slice(0, 16)}...`)
+                : (s.summary || null),
+              peer_npub: peer?.npub ?? null,
+              message_count: 0,
+              updated_at: Math.floor(s.lastModified / 1000),
+            };
+          });
         } catch {
           return [];
         }
@@ -360,71 +574,24 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
           ghostDir,
         });
 
-        // Stream in background
         (async () => {
           try {
             const abortController = new AbortController();
             activeQueries.set(conversationId, abortController);
 
-            const isExisting = knownSessionIds.has(conversationId);
-
-            const options: AgentOptions = {
-              model: "claude-sonnet-4-6-20250514",
-              cwd: ghostDir,
+            const options = buildAgentOptions({
+              apiKey: apiKeyRow.value,
               systemPrompt,
-              tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-              allowedTools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-              permissionMode: "acceptEdits",
-              maxTurns: 10,
+              sessionId: conversationId,
               abortController,
-              includePartialMessages: true,
-              executable: "bun",
-              env: {
-                ...process.env,
-                ANTHROPIC_API_KEY: apiKeyRow.value,
-                CLAUDE_CONFIG_DIR: claudeConfigDir,
-              },
-              // Resume existing sessions; for new ones, set a specific session ID
-              ...(isExisting
-                ? { resume: conversationId }
-                : { sessionId: conversationId }),
-            };
+            });
 
-            let streamedPartials = false;
-
-            for await (const message of query({ prompt: content, options })) {
-              // Track session ID so future messages use resume instead of sessionId
-              if (message.type === "system" && "subtype" in message && message.subtype === "init") {
-                knownSessionIds.add(message.session_id);
-              }
-
-              // Partial streaming — token-level updates
-              if (message.type === "stream_event" && "event" in message) {
-                const event = message.event as Record<string, unknown>;
-                if (event.type === "content_block_delta") {
-                  const delta = event.delta as Record<string, unknown>;
-                  if (delta.type === "text_delta" && typeof delta.text === "string") {
-                    streamedPartials = true;
-                    rpc.send.streamToken({ conversationId, token: delta.text });
-                  }
-                }
-              }
-
-              // Fallback: emit full text if no partials were streamed (e.g. tool-only turns)
-              if (message.type === "assistant" && !streamedPartials) {
-                const text = extractTextFromMessage(message.message);
-                if (text) {
-                  rpc.send.streamToken({ conversationId, token: text });
-                }
-              }
-
-              // Reset partial tracking for each new assistant turn
-              if (message.type === "assistant") {
-                streamedPartials = false;
-              }
-            }
-
-            rpc.send.streamDone({ conversationId });
+            await runAgentQuery(
+              content,
+              options,
+              (token) => rpc.send.streamToken({ conversationId, token }),
+              () => rpc.send.streamDone({ conversationId }),
+            );
           } catch (err: any) {
             if (err.name !== "AbortError") {
               rpc.send.streamError({
@@ -674,6 +841,9 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
     messages: {},
   },
 });
+
+// Set rpcRef so the DM handler can push events to the webview
+rpcRef = rpc;
 
 // ---------------------------------------------------------------------------
 // Window

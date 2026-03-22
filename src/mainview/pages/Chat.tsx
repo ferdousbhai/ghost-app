@@ -124,10 +124,16 @@ export function Chat() {
       if (conversationId === activeIdRef.current) handleStreamEnd(conversationId);
     });
 
+    // Refresh conversation list when a DM arrives
+    const unsubDm = streamEvents.on("dmReceived", () => {
+      rpc.request.listConversations({}).then(setConversations);
+    });
+
     return () => {
       unsubToken();
       unsubDone();
       unsubError();
+      unsubDm();
     };
   }, []);
 
@@ -279,12 +285,16 @@ export function Chat() {
               onClick={() => setActiveId(conv.id)}
               onDoubleClick={() => startRename(conv)}
             >
-              {/* Spectral orb */}
+              {/* Indicator: peer icon for DMs, spectral orb for regular */}
               <span
                 className={`flex-shrink-0 w-2 h-2 rounded-full mr-2.5 transition-all duration-300 ${
-                  activeId === conv.id
-                    ? "bg-ghost-amber/70 shadow-[0_0_6px_oklch(0.78_0.16_65_/_0.5)]"
-                    : "bg-white/15 group-hover:bg-white/25 group-hover:shadow-[0_0_4px_oklch(1_0_0_/_0.1)]"
+                  conv.peer_npub
+                    ? (activeId === conv.id
+                      ? "bg-[oklch(0.72_0.12_240/0.7)] shadow-[0_0_6px_oklch(0.72_0.12_240_/_0.5)]"
+                      : "bg-[oklch(0.72_0.12_240/0.3)] group-hover:bg-[oklch(0.72_0.12_240/0.5)]")
+                    : (activeId === conv.id
+                      ? "bg-ghost-amber/70 shadow-[0_0_6px_oklch(0.78_0.16_65_/_0.5)]"
+                      : "bg-white/15 group-hover:bg-white/25 group-hover:shadow-[0_0_4px_oklch(1_0_0_/_0.1)]")
                 }`}
               />
               {renamingId === conv.id ? (

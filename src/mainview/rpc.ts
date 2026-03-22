@@ -12,11 +12,13 @@ import type { GhostRPC } from "../shared/rpc";
 type StreamTokenEvent = { conversationId: string; token: string };
 type StreamDoneEvent = { conversationId: string };
 type StreamErrorEvent = { conversationId: string; error: string };
+type DmReceivedEvent = { conversationId: string; peerNpub: string; peerName: string | null };
 
 type StreamEventMap = {
   streamToken: StreamTokenEvent;
   streamDone: StreamDoneEvent;
   streamError: StreamErrorEvent;
+  dmReceived: DmReceivedEvent;
 };
 
 type StreamEventListener<K extends keyof StreamEventMap> = (
@@ -29,6 +31,7 @@ const listeners: {
   streamToken: new Set(),
   streamDone: new Set(),
   streamError: new Set(),
+  dmReceived: new Set(),
 };
 
 export const streamEvents = {
@@ -72,6 +75,9 @@ const rpcConfig = Electroview.defineRPC<GhostRPC>({
       },
       streamError: (data) => {
         emit("streamError", data);
+      },
+      dmReceived: (data) => {
+        emit("dmReceived", data);
       },
     },
   },

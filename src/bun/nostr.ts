@@ -24,6 +24,11 @@ export function npubToHex(npub: string): string {
   return data as string;
 }
 
+/** Encode a hex public key as npub. */
+export function hexToNpub(pubkeyHex: string): string {
+  return nip19.npubEncode(pubkeyHex);
+}
+
 /** Decode an nsec string to get the full identity. */
 export function identityFromNsec(nsec: string): NostrIdentity {
   const { type, data } = nip19.decode(nsec);
