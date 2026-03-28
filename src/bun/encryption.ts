@@ -34,6 +34,10 @@ export type GiftWrapMessage = {
   content: string;
   conversationId: string;
   timestamp: number;
+  cashuToken?: string;
+  requiredAmount?: number;
+  p2pkPubkey?: string;
+  trustedMints?: string[];
 };
 
 /** Create a kind:1059 gift-wrapped encrypted DM. */

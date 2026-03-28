@@ -14,12 +14,24 @@ export function Settings() {
   const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "ready" | "error">("idle");
   const [updateError, setUpdateError] = useState("");
   const [backupCopied, setBackupCopied] = useState(false);
+  const [nutzap, setNutzap] = useState<{
+    rateMutuals: number;
+    rateOthers: number;
+    trustedMints: string[];
+    p2pkPubkey: string | null;
+    balance: number;
+  }>({ rateMutuals: 0, rateOthers: 0, trustedMints: [], p2pkPubkey: null, balance: 0 });
+  const [nutzapSaved, setNutzapSaved] = useState(false);
+  const [nutzapPublished, setNutzapPublished] = useState(false);
+  const [newMint, setNewMint] = useState("");
+  const [p2pkCopied, setP2pkCopied] = useState(false);
 
   useEffect(() => {
     rpc.request.hasApiKey({}).then(setHasKey);
     rpc.request.getIdentity({}).then(setIdentity);
     rpc.request.getRelayStatus({}).then(setRelayStatus);
     rpc.request.getAppVersion({}).then(setAppVersion);
+    rpc.request.getNutzapConfig({}).then(setNutzap);
   }, []);
 
   async function saveApiKey() {
@@ -259,6 +271,141 @@ export function Settings() {
               <span className="font-mono">{relay}</span>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Nutzap Payments (NIP-61) */}
+      <section className="mb-8 glass-card p-5">
+        <h2 className="text-base font-display mb-3 flex items-center gap-2">
+          <svg className="w-4 h-4 text-[var(--ghost-amber)] opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+          DM Payments
+        </h2>
+        <p className="text-sm text-[var(--ghost-muted)] mb-4">
+          Charge visitors ecash (Cashu) per message to cover AI inference costs. Set to 0 for free replies.
+        </p>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-[var(--ghost-muted)] mb-1 block">Followed peers (sats/msg)</label>
+              <input
+                type="number"
+                min={0}
+                value={nutzap.rateMutuals}
+                onChange={(e) => setNutzap({ ...nutzap, rateMutuals: parseInt(e.target.value) || 0 })}
+                className="glass-input w-full px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[var(--ghost-muted)] mb-1 block">Others (sats/msg)</label>
+              <input
+                type="number"
+                min={0}
+                value={nutzap.rateOthers}
+                onChange={(e) => setNutzap({ ...nutzap, rateOthers: parseInt(e.target.value) || 0 })}
+                className="glass-input w-full px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-[var(--ghost-muted)] mb-1 block">Trusted Cashu mints</label>
+            <div className="space-y-2">
+              {nutzap.trustedMints.map((mint, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="glass-card flex-1 px-3 py-1.5 text-xs font-mono text-[var(--ghost-muted)]">{mint}</div>
+                  <button
+                    onClick={() => setNutzap({ ...nutzap, trustedMints: nutzap.trustedMints.filter((_, j) => j !== i) })}
+                    className="btn-ghost px-2 py-1 text-xs text-[var(--ghost-rose)]"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={newMint}
+                  onChange={(e) => setNewMint(e.target.value)}
+                  placeholder="https://mint.example.com"
+                  className="glass-input flex-1 px-3 py-1.5 text-xs"
+                />
+                <button
+                  onClick={() => {
+                    if (newMint.trim()) {
+                      setNutzap({ ...nutzap, trustedMints: [...nutzap.trustedMints, newMint.trim()] });
+                      setNewMint("");
+                    }
+                  }}
+                  disabled={!newMint.trim()}
+                  className="btn-ghost px-3 py-1.5 text-xs"
+                >
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {nutzap.p2pkPubkey && (
+            <div>
+              <label className="text-xs text-[var(--ghost-muted)] mb-1 block">P2PK public key</label>
+              <div className="flex items-center gap-2">
+                <div className="glass-card flex-1 px-3 py-1.5 text-xs font-mono text-[var(--ghost-muted)] break-all">
+                  {nutzap.p2pkPubkey}
+                </div>
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(nutzap.p2pkPubkey!);
+                    setP2pkCopied(true);
+                    setTimeout(() => setP2pkCopied(false), 2000);
+                  }}
+                  className="btn-ghost px-2 py-1 text-xs"
+                >
+                  {p2pkCopied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={async () => {
+                await rpc.request.setNutzapConfig({
+                  rateMutuals: nutzap.rateMutuals,
+                  rateOthers: nutzap.rateOthers,
+                  trustedMints: nutzap.trustedMints,
+                });
+                setNutzapSaved(true);
+                setTimeout(() => setNutzapSaved(false), 2000);
+              }}
+              className="btn-primary px-4 py-2 text-sm"
+            >
+              Save
+            </button>
+            <button
+              onClick={async () => {
+                await rpc.request.setNutzapConfig({
+                  rateMutuals: nutzap.rateMutuals,
+                  rateOthers: nutzap.rateOthers,
+                  trustedMints: nutzap.trustedMints,
+                });
+                const result = await rpc.request.publishNutzapInfo({});
+                if ("success" in result) {
+                  setNutzapPublished(true);
+                  setTimeout(() => setNutzapPublished(false), 3000);
+                }
+              }}
+              className="btn-ghost px-4 py-2 text-sm"
+            >
+              {nutzapPublished ? "Published!" : "Save & publish to Nostr"}
+            </button>
+            {nutzapSaved && <span className="text-xs text-[var(--ghost-amber)]">Saved.</span>}
+          </div>
+
+          <div className="glass-card px-4 py-3 text-sm flex items-center justify-between">
+            <span className="text-[var(--ghost-muted)]">Balance</span>
+            <span className="text-amber-glow font-mono">{nutzap.balance.toLocaleString()} sats</span>
+          </div>
         </div>
       </section>
 

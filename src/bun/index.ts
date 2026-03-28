@@ -1,5 +1,5 @@
 import { BrowserView, BrowserWindow, Updater, Utils } from "electrobun/bun";
-import { mkdirSync, existsSync, writeFileSync, readFileSync, readSync, openSync, closeSync, readdirSync, unlinkSync } from "fs";
+import { mkdirSync, existsSync, writeFileSync, readFileSync, readSync, openSync, closeSync, readdirSync, unlinkSync, renameSync } from "fs";
 import { join, relative, extname } from "path";
 import Database from "bun:sqlite";
 import {
@@ -13,8 +13,9 @@ import {
 import type { GhostRPC, Conversation, Document, Peer } from "../shared/rpc";
 import { buildSystemPrompt } from "./prompt";
 import { RelayManager } from "./relay";
-import { generateKeypair as genKeypair, identityFromNsec, npubToHex, hexToNpub } from "./nostr";
+import { generateKeypair as genKeypair, identityFromNsec, npubToHex, hexToNpub, createNutzapInfoEvent } from "./nostr";
 import { createGiftWrap, unwrapGiftWrap, type GiftWrapMessage } from "./encryption";
+import { generateP2PKKeypair, redeemToken } from "./cashu";
 
 const DEFAULT_CHARACTER_TEMPLATE = `# Character
 
@@ -62,14 +63,29 @@ This is where you teach your AI who you are. The more you share, the better it r
 `;
 
 // ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+const HOME = require("os").homedir();
+const DEFAULT_TOOLS = ["Read", "Write", "Edit", "Bash", "Glob", "Grep", "WebFetch", "WebSearch"];
+const READONLY_TOOLS = ["Read", "Glob", "Grep", "WebFetch", "WebSearch"];
+const MAX_DM_LENGTH = 4096;
+const DEFAULT_TRUSTED_MINTS = ["https://mint.minibits.cash/Bitcoin"];
+
+// ---------------------------------------------------------------------------
 // Data directories
 // ---------------------------------------------------------------------------
 const ghostDir = Utils.paths.userData;
 const docsDir = join(ghostDir, "docs");
-const characterPath = join(ghostDir, "character.md");
+const characterPath = join(docsDir, "character.md");
 const memoriesPath = join(ghostDir, "memories.json");
 
 if (!existsSync(docsDir)) mkdirSync(docsDir, { recursive: true });
+
+// Migration: move character.md from ghostDir root into docs/
+const oldCharacterPath = join(ghostDir, "character.md");
+if (existsSync(oldCharacterPath) && !existsSync(characterPath)) {
+  renameSync(oldCharacterPath, characterPath);
+}
 
 // Initialize default files if missing
 if (!existsSync(characterPath)) writeFileSync(characterPath, DEFAULT_CHARACTER_TEMPLATE, "utf-8");
@@ -78,16 +94,12 @@ if (!existsSync(memoriesPath)) writeFileSync(memoriesPath, "{}", "utf-8");
 // Agent SDK sessions stored alongside ghost data
 const claudeConfigDir = join(ghostDir, ".claude");
 
-// Character content cache — invalidated on save
-let cachedCharacter: string | null = null;
 function getCharacterContent(): string | null {
-  if (cachedCharacter !== null) return cachedCharacter;
   try {
-    cachedCharacter = readFileSync(characterPath, "utf-8");
+    return readFileSync(characterPath, "utf-8");
   } catch {
-    cachedCharacter = null;
+    return null;
   }
-  return cachedCharacter;
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +142,23 @@ const stmts = {
   listPeerSessions: db.prepare("SELECT session_id, npub, username FROM peers WHERE session_id IS NOT NULL"),
   updateLastMessageAt: db.prepare("UPDATE peers SET last_message_at = unixepoch() WHERE npub = ?"),
 };
+
+// Migration: generate P2PK keypair if Nostr identity exists but P2PK doesn't
+{
+  const hasNsec = stmts.getConfig.get("nsec") as { value: string } | null;
+  const hasP2pk = stmts.getConfig.get("p2pk_privkey") as { value: string } | null;
+  if (hasNsec?.value && !hasP2pk?.value) {
+    const p2pk = generateP2PKKeypair();
+    stmts.setConfig.run("p2pk_privkey", p2pk.privkeyHex);
+    stmts.setConfig.run("p2pk_pubkey", p2pk.pubkeyHex);
+  }
+}
+
+/** Read a config value by key. */
+function getConfigValue(key: string): string | null {
+  const row = stmts.getConfig.get(key) as { value: string } | null;
+  return row?.value ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // File-based helpers
@@ -277,20 +306,22 @@ function buildAgentOptions(opts: {
   apiKey: string;
   systemPrompt: string;
   sessionId: string;
+  cwd?: string;
   tools?: string[];
-  permissionMode?: string;
+  permissionMode?: "acceptEdits" | "dontAsk";
   maxTurns?: number;
   abortController?: AbortController;
 }): AgentOptions {
   const isExisting = knownSessionIds.has(opts.sessionId);
+  const resolvedTools = opts.tools ?? DEFAULT_TOOLS;
   return {
     model: "claude-sonnet-4-6-20250514",
-    cwd: ghostDir,
+    cwd: opts.cwd ?? HOME,
     systemPrompt: opts.systemPrompt,
-    tools: opts.tools ?? ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-    allowedTools: opts.tools ?? ["Read", "Write", "Edit", "Bash", "Glob", "Grep"],
-    permissionMode: (opts.permissionMode ?? "acceptEdits") as "acceptEdits" | "dontAsk",
-    maxTurns: opts.maxTurns ?? 10,
+    tools: resolvedTools,
+    allowedTools: resolvedTools,
+    permissionMode: opts.permissionMode ?? "acceptEdits",
+    maxTurns: opts.maxTurns ?? Infinity,
     abortController: opts.abortController,
     includePartialMessages: true,
     executable: "bun",
@@ -318,6 +349,19 @@ const MAX_CONCURRENT_DMS = 3;
 // rpc is initialized after this block — late-bound via rpcRef
 let rpcRef: { send: { streamToken: (d: { conversationId: string; token: string }) => void; streamDone: (d: { conversationId: string }) => void; dmReceived: (d: { conversationId: string; peerNpub: string; peerName: string | null }) => void } } | null = null;
 
+/** Send a gift-wrapped DM reply back to the sender. */
+async function sendDMReply(
+  nsec: string,
+  recipientPubkeyHex: string,
+  message: GiftWrapMessage,
+): Promise<void> {
+  const event = createGiftWrap(nsec, recipientPubkeyHex, message);
+  const mgr = getRelayManager();
+  if (mgr.connectedCount > 0) {
+    await mgr.publish(event);
+  }
+}
+
 async function handleIncomingDM(
   senderPubkeyHex: string,
   message: GiftWrapMessage,
@@ -340,16 +384,80 @@ async function handleIncomingDM(
     peerName: peer?.username ?? null,
   });
 
-  // Auto-reply only for followed peers (prevents API credit abuse)
-  if (!peer?.is_following) {
-    console.log(`DM from ${senderNpub} (not followed) — stored but no auto-reply`);
+  // Enforce message length cap
+  if (message.content.length > MAX_DM_LENGTH) {
+    console.log(`DM from ${senderNpub} — rejected (${message.content.length} chars > ${MAX_DM_LENGTH} limit)`);
     return;
+  }
+
+  // Determine required payment rate
+  const isFollowing = !!peer?.is_following;
+  const rateMutuals = parseInt(getConfigValue("nutzap_rate_mutuals") ?? "0") || 0;
+  const rateOthers = parseInt(getConfigValue("nutzap_rate_others") ?? "0") || 0;
+  const requiredRate = isFollowing ? rateMutuals : rateOthers;
+
+  // If not following and rate is 0, don't reply (no free replies for strangers)
+  if (!isFollowing && requiredRate === 0) {
+    console.log(`DM from ${senderNpub} (not followed, no rate set) — stored but no auto-reply`);
+    return;
+  }
+
+  // If payment is required, verify the nutzap
+  if (requiredRate > 0) {
+    const p2pkPrivkey = getConfigValue("p2pk_privkey");
+    if (!p2pkPrivkey) {
+      console.log(`DM from ${senderNpub} — skipped (nutzap rate set but no P2PK key)`);
+      return;
+    }
+
+    if (!message.cashuToken) {
+      // Send payment_required response
+      const p2pkPubkey = getConfigValue("p2pk_pubkey") ?? "";
+      const trustedMints = JSON.parse(getConfigValue("nutzap_trusted_mints") ?? JSON.stringify(DEFAULT_TRUSTED_MINTS));
+      await sendDMReply(nsec, senderPubkeyHex, {
+        type: "payment_required",
+        content: `Payment of ${requiredRate} sats required to chat with this ghost.`,
+        conversationId: sessionId,
+        timestamp: Math.floor(Date.now() / 1000),
+        requiredAmount: requiredRate,
+        p2pkPubkey,
+        trustedMints,
+      });
+      return;
+    }
+
+    try {
+      const redeemedAmount = await redeemToken(message.cashuToken, p2pkPrivkey);
+      if (redeemedAmount < requiredRate) {
+        await sendDMReply(nsec, senderPubkeyHex, {
+          type: "payment_insufficient",
+          content: `Payment of ${redeemedAmount} sats is insufficient. Required: ${requiredRate} sats.`,
+          conversationId: sessionId,
+          timestamp: Math.floor(Date.now() / 1000),
+          requiredAmount: requiredRate,
+        });
+        return;
+      }
+      // Payment verified — update balance
+      const currentBalance = parseInt(getConfigValue("cashu_balance") ?? "0") || 0;
+      stmts.setConfig.run("cashu_balance", String(currentBalance + redeemedAmount));
+      console.log(`DM from ${senderNpub} — payment of ${redeemedAmount} sats verified`);
+    } catch (err: any) {
+      console.error(`DM from ${senderNpub} — payment redemption failed:`, err.message);
+      await sendDMReply(nsec, senderPubkeyHex, {
+        type: "payment_failed",
+        content: "Payment verification failed. Token may be invalid or already spent.",
+        conversationId: sessionId,
+        timestamp: Math.floor(Date.now() / 1000),
+      });
+      return;
+    }
   }
 
   stmts.updateLastMessageAt.run(senderNpub);
 
-  const apiKeyRow = stmts.getConfig.get("api_key") as { value: string } | null;
-  if (!apiKeyRow?.value) return;
+  const apiKey = getConfigValue("api_key");
+  if (!apiKey) return;
 
   if (activeDmCount >= MAX_CONCURRENT_DMS) {
     console.log(`DM from ${senderNpub} — skipped (${MAX_CONCURRENT_DMS} concurrent DM sessions active)`);
@@ -358,21 +466,21 @@ async function handleIncomingDM(
 
   activeDmCount++;
   try {
-    const usernameRow = stmts.getConfig.get("username") as { value: string } | null;
     const systemPrompt = buildSystemPrompt({
-      username: usernameRow?.value ?? null,
+      username: getConfigValue("username"),
       character: getCharacterContent(),
       ghostDir,
       peerContext: { peerName: peer?.username ?? null, peerNpub: senderNpub },
     });
 
     const options = buildAgentOptions({
-      apiKey: apiKeyRow.value,
+      apiKey: apiKey,
       systemPrompt,
       sessionId,
-      tools: [],
+      cwd: ghostDir,
+      tools: READONLY_TOOLS,
       permissionMode: "dontAsk",
-      maxTurns: 3,
+      maxTurns: 10,
     });
 
     const responseText = await runAgentQuery(
@@ -383,16 +491,12 @@ async function handleIncomingDM(
     );
 
     if (responseText.trim()) {
-      const event = createGiftWrap(nsec, senderPubkeyHex, {
+      await sendDMReply(nsec, senderPubkeyHex, {
         type: "chat",
         content: responseText,
         conversationId: sessionId!,
         timestamp: Math.floor(Date.now() / 1000),
       });
-      const mgr = getRelayManager();
-      if (mgr.connectedCount > 0) {
-        await mgr.publish(event);
-      }
     }
   } finally {
     activeDmCount--;
@@ -625,7 +729,6 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
       },
       saveCharacter: ({ content }) => {
         writeFileSync(characterPath, content, "utf-8");
-        cachedCharacter = content;
         return { success: true };
       },
 
@@ -720,6 +823,12 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
         const identity = genKeypair();
         stmts.setConfig.run("nsec", identity.nsec);
         stmts.setConfig.run("npub", identity.npub);
+        // Also generate P2PK keypair for nutzaps
+        if (!getConfigValue("p2pk_privkey")) {
+          const p2pk = generateP2PKKeypair();
+          stmts.setConfig.run("p2pk_privkey", p2pk.privkeyHex);
+          stmts.setConfig.run("p2pk_pubkey", p2pk.pubkeyHex);
+        }
         return { npub: identity.npub, nsec: identity.nsec };
       },
       importKeypair: ({ nsec }) => {
@@ -727,6 +836,11 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
           const identity = identityFromNsec(nsec);
           stmts.setConfig.run("nsec", identity.nsec);
           stmts.setConfig.run("npub", identity.npub);
+          if (!getConfigValue("p2pk_privkey")) {
+            const p2pk = generateP2PKKeypair();
+            stmts.setConfig.run("p2pk_privkey", p2pk.privkeyHex);
+            stmts.setConfig.run("p2pk_pubkey", p2pk.pubkeyHex);
+          }
           return { npub: identity.npub };
         } catch (err: any) {
           return { error: err.message || "Invalid nsec" };
@@ -814,7 +928,44 @@ const rpc = BrowserView.defineRPC<GhostRPC>({
       },
 
       // ===================================================================
-      // Nostr DMs (unchanged)
+      // Nutzap (NIP-61) payment settings
+      // ===================================================================
+      getNutzapConfig: () => {
+        return {
+          rateMutuals: parseInt(getConfigValue("nutzap_rate_mutuals") ?? "0") || 0,
+          rateOthers: parseInt(getConfigValue("nutzap_rate_others") ?? "0") || 0,
+          trustedMints: JSON.parse(getConfigValue("nutzap_trusted_mints") ?? JSON.stringify(DEFAULT_TRUSTED_MINTS)),
+          p2pkPubkey: getConfigValue("p2pk_pubkey"),
+          balance: parseInt(getConfigValue("cashu_balance") ?? "0") || 0,
+        };
+      },
+      setNutzapConfig: ({ rateMutuals, rateOthers, trustedMints }) => {
+        if (rateMutuals !== undefined) stmts.setConfig.run("nutzap_rate_mutuals", String(rateMutuals));
+        if (rateOthers !== undefined) stmts.setConfig.run("nutzap_rate_others", String(rateOthers));
+        if (trustedMints !== undefined) stmts.setConfig.run("nutzap_trusted_mints", JSON.stringify(trustedMints));
+        return { success: true };
+      },
+      publishNutzapInfo: async () => {
+        const nsec = getConfigValue("nsec");
+        if (!nsec) return { error: "No Nostr identity. Generate a keypair first." };
+        const p2pkPubkey = getConfigValue("p2pk_pubkey");
+        if (!p2pkPubkey) return { error: "No P2PK key. Generate a keypair first." };
+
+        const trustedMints: string[] = JSON.parse(getConfigValue("nutzap_trusted_mints") ?? JSON.stringify(DEFAULT_TRUSTED_MINTS));
+        const mgr = getRelayManager();
+        if (mgr.connectedCount === 0) await mgr.connect();
+
+        const event = createNutzapInfoEvent(nsec, {
+          relays: mgr.configuredRelays,
+          mints: trustedMints.map((url) => ({ url, unit: "sat" })),
+          p2pkPubkeyHex: p2pkPubkey,
+        });
+        await mgr.publish(event);
+        return { success: true };
+      },
+
+      // ===================================================================
+      // Nostr DMs
       // ===================================================================
       sendDM: async ({ recipientNpub, content, conversationId }) => {
         const nsecRow = stmts.getConfig.get("nsec") as { value: string } | null;

@@ -60,6 +60,28 @@ export function createProfileEvent(
   return event;
 }
 
+/** Create a kind:10019 nutzap info event (NIP-61). */
+export function createNutzapInfoEvent(
+  nsec: string,
+  options: {
+    relays: string[];
+    mints: Array<{ url: string; unit: string }>;
+    p2pkPubkeyHex: string;
+  }
+): Event {
+  const { data: sk } = nip19.decode(nsec);
+  return finalizeEvent({
+    kind: 10019,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [
+      ...options.relays.map((r) => ["relay", r]),
+      ...options.mints.map((m) => ["mint", m.url, m.unit]),
+      ["pubkey", options.p2pkPubkeyHex],
+    ],
+    content: "",
+  }, sk as Uint8Array);
+}
+
 /** Create a kind:10002 relay list event (NIP-65). */
 export function createRelayListEvent(nsec: string, relays: string[]): Event {
   const { data: sk } = nip19.decode(nsec);

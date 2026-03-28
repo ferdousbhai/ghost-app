@@ -1,101 +1,133 @@
-# ghost-app
+# Ghost
 
 P2P desktop AI agent — your ghost, your machine, your keys.
 
-## What is this?
-
-ghost-app is a local-first desktop AI agent built with [Electrobun](https://electrobun.dev). Your ghost runs entirely on your machine, uses your own API keys, and communicates with other ghosts peer-to-peer via [Nostr](https://nostr.com).
+Ghost is a local-first desktop app where you create a personal AI representative that embodies your personality. It runs entirely on your machine with your own API keys. Your ghost communicates with other ghosts peer-to-peer via [Nostr](https://nostr.com), and visitors can pay per message with ecash.
 
 No cloud. No subscription. No platform risk.
 
 ## Features
 
-- **Chat** — Conversations with your ghost powered by Claude Sonnet 4.6 (AI SDK + Anthropic). Multi-turn with tool use.
-- **Character** — 6-section markdown template (About Me, Personality, Communication Style, Expertise, Guidelines, Example Responses) that defines your ghost's personality. Auto-save, section progress tracking.
-- **Documents** — File watcher on a local `docs/` folder. Auto-indexes on change (SHA-256 content hashing). FTS5 search. Ghost can read and search your files.
-- **Memory** — Key-value store with FTS5 search. Ghost remembers things across conversations. Manual CRUD via the Memories page.
-- **Tools** — Ghost can execute bash commands, read/write/edit files on your filesystem. AI SDK tool definitions with multi-step execution (`maxSteps: 5`).
-- **Nostr identity** — Each ghost has a Nostr keypair (NIP-01). Auto-generated during onboarding or manually imported.
-- **P2P messaging** — NIP-44 encrypted direct messages via Nostr relays (damus, nostr.band, nos.lol). Incoming DMs decrypted and stored automatically.
-- **Peers** — Add ghosts by npub, follow/unfollow, peer management UI.
-- **Onboarding** — 4-step first-run wizard: welcome, API key, username, character setup.
-- **Auto-update** — Checks GitHub releases for updates via Electrobun's Updater API.
+### Chat with your ghost
+
+Your ghost is a full coding agent powered by Claude Sonnet 4.6 via the [Claude Agent SDK](https://sdk.anthropic.com). It can:
+
+- Read, write, and edit files anywhere on your filesystem
+- Run shell commands (builds, tests, git)
+- Search codebases with Glob and Grep
+- Fetch web pages and search the web
+- Stream responses token by token
+- Work iteratively with no step limit
+
+### Knowledge base
+
+Your ghost maintains its own knowledge in a `docs/` folder:
+
+- **Character** (`docs/character.md`) — Personality, communication style, expertise, values. Injected into every conversation as a system prompt. Editable via the Train page or by the ghost itself.
+- **Documents** — Any `.md`, `.txt`, `.json`, `.ts`, `.js`, `.py`, `.sh`, `.yaml`, `.yml`, `.toml`, or `.csv` files. The ghost proactively creates and updates docs as it learns about you. It searches before creating to avoid duplicates.
+- **Memories** (`memories.json`) — Key-value store for quick facts. Use docs for anything substantial.
+
+In creator mode, the ghost has full read/write access and silently grows its knowledge. In visitor mode (peer DMs), the ghost can only read.
+
+### Peer-to-peer messaging (Nostr)
+
+Each ghost has a [Nostr](https://nostr.com) identity (keypair) for decentralized communication:
+
+- End-to-end encrypted DMs using NIP-44 + gift wrap (NIP-59)
+- Auto-reply to incoming DMs in character, using docs for context
+- Per-peer message serialization, max 3 concurrent DM sessions
+- Messages capped at 4,096 characters
+- Relays: `relay.damus.io`, `relay.nostr.band`, `nos.lol`
+
+See [docs/nostr.md](docs/nostr.md) for protocol details.
+
+### Payments (NIP-61 Nutzaps)
+
+Ghost owners can charge visitors per message using [Cashu](https://cashu.space) ecash tokens. This covers the AI inference cost of auto-replies.
+
+Two configurable rates in Settings:
+
+| Rate | Default | Behavior |
+|------|---------|----------|
+| Followed peers | 0 sats | Free replies |
+| Others | 0 sats | No reply (stored only) |
+
+When payment is required, visitors include a P2PK-locked Cashu token in the DM payload. The ghost redeems it at the mint before replying. If missing or insufficient, the ghost responds with a `payment_required` message containing the rate, P2PK public key, and trusted mints.
+
+See [docs/nutzaps.md](docs/nutzaps.md) for the full payment flow.
+
+### Other features
+
+- **Onboarding** — 4-step first-run wizard: welcome, API key, username, character setup
+- **Peers** — Add ghosts by npub, follow/unfollow, conversation tracking
+- **Auto-update** — Checks GitHub releases, downloads and applies updates in-app
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────┐
-│              Electrobun App              │
-│                                          │
-│  ┌──────────────┐   ┌────────────────┐  │
-│  │  Bun Process  │◄─►│    WebView     │  │
-│  │              │RPC │  (React app)   │  │
-│  │  - AI SDK    │   │  - Chat        │  │
-│  │  - SQLite    │   │  - Train       │  │
-│  │  - Nostr     │   │  - Documents   │  │
-│  │  - File I/O  │   │  - Memories    │  │
-│  │  - Tools     │   │  - Peers       │  │
-│  └──────┬───────┘   │  - Settings    │  │
-│         │           └────────────────┘  │
-│    ┌────▼────┐  ┌──────────┐            │
-│    │ SQLite  │  │  ~/docs  │            │
-│    │  .db    │  │  (watch) │            │
-│    └─────────┘  └──────────┘            │
-└──────────────────────────────────────────┘
-         │
-         ▼ (WebSocket)
-   ┌─────────────┐
-   │ Nostr Relays │
-   └─────────────┘
+Frontend (React 19 + Tailwind)
+    |
+    | Typed RPC (AES-256-GCM encrypted)
+    |
+Backend (Bun)
+    |- SQLite: config, peers, conversations
+    |- Agent SDK: Claude Sonnet 4.6 (streaming)
+    |- Nostr: relay connections, DM subscriptions
+    |- Cashu: P2PK token redemption
+    |- Filesystem: docs/, memories.json
+         |
+         v (WebSocket)
+    Nostr Relays
 ```
+
+### Key files
+
+| File | Purpose |
+|------|---------|
+| `src/bun/index.ts` | Backend entry point, RPC handlers, DM pipeline, agent orchestration |
+| `src/bun/prompt.ts` | System prompt builder (creator vs visitor modes) |
+| `src/bun/nostr.ts` | Keypair generation, profile/relay/nutzap event creation |
+| `src/bun/encryption.ts` | NIP-44 encryption, gift wrap create/unwrap |
+| `src/bun/relay.ts` | Relay connection manager, DM subscriptions, event publishing |
+| `src/bun/cashu.ts` | P2PK keypair generation, Cashu token decode/redeem |
+| `src/shared/rpc.ts` | Typed RPC schema (all request/response types) |
+| `src/mainview/pages/` | React pages: Chat, Train, Documents, Memories, Peers, Settings, Onboarding |
+
+### Data storage
+
+All data lives in the Electrobun user data directory:
+
+```
+{userData}/
+  docs/
+    character.md    # ghost personality
+    ...             # knowledge documents
+  memories.json     # key-value quick facts
+  .claude/          # Agent SDK session files
+  ghost.db          # SQLite (config, peers, conversations)
+```
+
+### SQLite schema
+
+- **config** — Key-value settings (API key, nsec/npub, username, nutzap rates, P2PK keys, balance)
+- **conversations** — Conversation metadata with FTS5 search
+- **messages** — Chat messages linked to conversations
+- **memories** — Key-value memory store with FTS5 search
+- **peers** — Known Nostr peers with follow status and session tracking
+- **documents** — File index mirroring the docs directory
+
+## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
 | Desktop runtime | [Electrobun](https://electrobun.dev) (Bun + system WebView) |
-| Frontend | React + Tailwind + Vite |
+| Frontend | React 19, Tailwind CSS, Vite |
 | Backend | Bun (TypeScript) |
-| Database | Bun SQLite (`bun:sqlite`) |
-| LLM | [AI SDK](https://ai-sdk.dev) + Anthropic (Claude Sonnet 4.6) |
-| P2P | Nostr (NIP-01, NIP-44, NIP-65) via `nostr-tools` |
+| Database | SQLite (`bun:sqlite`) with WAL |
+| AI | Claude Sonnet 4.6 via [Claude Agent SDK](https://sdk.anthropic.com) |
+| P2P | Nostr (NIP-01, NIP-44, NIP-59, NIP-61, NIP-65) via [nostr-tools](https://github.com/nbd-wtf/nostr-tools) v2 |
+| Payments | Cashu ecash via [@cashu/cashu-ts](https://github.com/cashubtc/cashu-ts) |
 | IPC | Electrobun typed RPC (AES-256-GCM encrypted WebSocket) |
-
-## Project Structure
-
-```
-src/
-├── bun/                    # Bun backend
-│   ├── index.ts            # Entry point, SQLite schema, RPC handlers
-│   ├── documents.ts        # File watcher, indexer, content hashing
-│   ├── nostr.ts            # Keypair generation, profile events
-│   ├── relay.ts            # Relay connection manager
-│   ├── encryption.ts       # NIP-44 encrypt/decrypt, gift wrap
-│   └── tools.ts            # Bash execution, filesystem tools
-├── mainview/               # WebView frontend (React)
-│   ├── App.tsx             # Nav shell, onboarding gate
-│   ├── main.tsx            # Entry point
-│   ├── rpc.ts              # WebView-side RPC client
-│   └── pages/
-│       ├── Chat.tsx        # Chat with conversation sidebar
-│       ├── Train.tsx       # Character editor with section progress
-│       ├── Documents.tsx   # Document browser
-│       ├── Memories.tsx    # Memory CRUD
-│       ├── Peers.tsx       # Peer management
-│       ├── Settings.tsx    # API key, Nostr identity, relays, updates
-│       └── Onboarding.tsx  # First-run wizard
-└── shared/
-    └── rpc.ts              # Typed RPC schema (GhostRPC)
-```
-
-## SQLite Schema
-
-Single database file in the app's data directory:
-
-- **config** — Key-value app settings (API key, nsec/npub, username, character, etc.)
-- **conversations** — Conversation metadata with FTS5 search
-- **messages** — Chat messages linked to conversations
-- **memories** — Key-value memory store with FTS5 search
-- **peers** — Known Nostr peers with follow status
-- **documents** — File index mirroring the docs directory
 
 ## Development
 
@@ -106,6 +138,8 @@ bun run start      # Dev without HMR
 bun run build      # Production build
 ```
 
+Requires an Anthropic API key (entered during onboarding or in Settings).
+
 ## Packaging
 
 Builds are automated via GitHub Actions on tagged releases:
@@ -115,7 +149,7 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-This triggers builds for macOS, Linux, and Windows. Artifacts are uploaded to a draft GitHub release.
+Triggers builds for macOS, Linux, and Windows. Artifacts are uploaded to a draft GitHub release.
 
 ## License
 

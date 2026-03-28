@@ -137,6 +137,26 @@ export type GhostRPC = {
       disconnectRelays: { params: {}; response: { success: boolean } };
       getRelayStatus: { params: {}; response: { connected: number; relays: string[] } };
 
+      // Nutzap (NIP-61) payment settings
+      getNutzapConfig: {
+        params: {};
+        response: {
+          rateMutuals: number;
+          rateOthers: number;
+          trustedMints: string[];
+          p2pkPubkey: string | null;
+          balance: number;
+        };
+      };
+      setNutzapConfig: {
+        params: { rateMutuals?: number; rateOthers?: number; trustedMints?: string[] };
+        response: { success: boolean };
+      };
+      publishNutzapInfo: {
+        params: {};
+        response: { success: boolean } | { error: string };
+      };
+
       // Nostr DMs
       sendDM: {
         params: { recipientNpub: string; content: string; conversationId: string };
